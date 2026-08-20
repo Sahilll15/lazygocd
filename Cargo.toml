@@ -1,0 +1,25 @@
+[package]
+name = "lazygocd"
+version = "0.1.0"
+edition = "2024"
+description = "A fast terminal UI for GoCD, styled after lazygit"
+license = "MIT"
+repository = "https://github.com/Sahilll15/lazygocd"
+homepage = "https://github.com/Sahilll15/lazygocd"
+keywords = ["gocd", "tui", "ci", "terminal", "pipelines"]
+categories = ["command-line-utilities", "development-tools"]
+
+[profile.release]
+lto = true
+strip = true
+
+[dependencies]
+anyhow = "1.0.104"
+chrono = "0.4.45"
+crossterm = "0.29.0"
+dirs = "6.0.0"
+ratatui = "0.30.2"
+reqwest = { version = "0.13.4", features = ["blocking", "form", "gzip", "json"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+toml = "1.1.4"
