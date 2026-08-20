@@ -171,6 +171,7 @@ fn draw_footer(f: &mut Frame, app: &App, area: Rect) {
         ("p", "pause"),
         ("f", "favorite"),
         ("X", "cancel"),
+        ("o", "commit"),
         ("r", "refresh"),
         ("A", "gocd"),
         ("@", "github"),
@@ -187,6 +188,7 @@ fn draw_footer(f: &mut Frame, app: &App, area: Rect) {
         ("p", "pause"),
         ("f", "favorite"),
         ("X", "cancel"),
+        ("o", "commit"),
         ("r", "refresh"),
         ("?", "help"),
         ("q", "quit"),
@@ -579,6 +581,7 @@ fn draw_help(f: &mut Frame, area: Rect) {
         Line::from("t            trigger selected pipeline"),
         Line::from("p            pause/unpause selected pipeline"),
         Line::from("f            star/unstar selected pipeline as a favorite"),
+        Line::from("o            open the run's commit on GitHub (or the pending diff)"),
         Line::from("X            cancel the currently running stage"),
         Line::from("/            fuzzy-filter pipelines by name"),
         Line::from("r            refresh"),
@@ -677,7 +680,7 @@ fn draw_github_connect(f: &mut Frame, area: Rect, input: &str) {
     let lines = vec![
         field_label("GitHub personal access token"),
         Line::from(Span::styled(
-            "optional - only needed to check private repos; leave blank to disconnect",
+            "optional - leave blank to use `gh auth token` automatically if you have the GitHub CLI",
             Style::default().fg(theme::MUTED),
         )),
         Line::from(""),

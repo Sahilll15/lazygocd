@@ -566,6 +566,7 @@ impl App {
             KeyCode::Char('p') => self.request_pause_toggle(),
             KeyCode::Char('X') => self.request_cancel(),
             KeyCode::Char('f') => self.toggle_favorite(),
+            KeyCode::Char('o') => self.open_in_browser(),
             KeyCode::Char('A') => {
                 self.modal = Some(Modal::Reauth(ReauthForm::new(ReauthMode::Reconnect, &self.server_url)))
             }
@@ -1106,6 +1107,40 @@ impl App {
         self.rebuild_rows();
     }
 
+    /// 'o': open the relevant GitHub page for the selected run - the pending
+    /// compare view when we know the latest deploy is behind the branch head,
+    /// otherwise that run's commit.
+    fn open_in_browser(&mut self) {
+        let inst = match self.focus {
+            Focus::History | Focus::Detail => self.history.get(self.history_selected),
+            Focus::Groups => self
+                .current_row_pipeline_name()
+                .and_then(|name| self.history_cache.get(&name))
+                .and_then(|runs| runs.first()),
+        };
+        let Some(inst) = inst else {
+            self.status_line = "Open a pipeline first to jump to its commit".to_string();
+            return;
+        };
+        let Some(git_ref) = inst.git_ref() else {
+            self.status_line = "This run has no direct git material to open".to_string();
+            return;
+        };
+
+        let is_latest_run = self.history_selected == 0 && self.focus != Focus::Groups;
+        let url = match (&self.github_state, is_latest_run) {
+            (GithubState::Found(latest), true) if *latest != git_ref.deployed_sha => format!(
+                "https://github.com/{}/{}/compare/{}...{}",
+                git_ref.owner, git_ref.repo, git_ref.deployed_sha, latest
+            ),
+            _ => format!("https://github.com/{}/{}/commit/{}", git_ref.owner, git_ref.repo, git_ref.deployed_sha),
+        };
+        match open_url(&url) {
+            Ok(()) => self.status_line = format!("Opened {url}"),
+            Err(e) => self.error_line = Some(format!("Couldn't open browser: {e}")),
+        }
+    }
+
     pub fn current_row_pipeline_name(&self) -> Option<String> {
         match self.focus {
             Focus::Groups => match self.rows.get(self.selected)? {
@@ -1394,6 +1429,14 @@ pub fn fuzzy_match(haystack: &str, needle: &str) -> Option<Vec<usize>> {
         .filter(|c| *c != ' ')
         .map(|nc| hay.by_ref().find(|(_, hc)| hc.eq_ignore_ascii_case(&nc)).map(|(i, _)| i))
         .collect()
+}
+
+fn open_url(url: &str) -> std::io::Result<()> {
+    #[cfg(target_os = "macos")]
+    let mut cmd = std::process::Command::new("open");
+    #[cfg(not(target_os = "macos"))]
+    let mut cmd = std::process::Command::new("xdg-open");
+    cmd.arg(url).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).spawn().map(|_| ())
 }
 
 fn auth_hint(e: &str) -> &'static str {

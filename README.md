@@ -29,7 +29,7 @@ GoCD's web dashboard gets slow and clicky on large installations. lazygocd loads
 - **Live console logs** — open any job's log, auto-tail while it runs, scroll freely, `r` to refresh
 - **Fuzzy filter** — `/` then a few characters (`wabp` matches `web-app-build-prod`), matched letters highlighted
 - **Favorites** — star pipelines with `f`; they pin to a ★ section at the top
-- **Stale-deploy detection** — optional GitHub integration compares the deployed commit against the branch head and flags `⚠ not latest`
+- **Stale-deploy detection** — compares each deployed commit against the branch head and flags `⚠ not latest`; uses your `gh` CLI token automatically, and `o` jumps to the commit or pending diff on GitHub
 - **Feels instant** — disk-cached dashboard renders before the network responds, history prefetches on hover, adaptive rendering idles at ~0% CPU
 - **Network-resilient** — cached data stays browsable through VPN drops; reconnect anytime with `A`
 
@@ -86,10 +86,11 @@ Env vars override the config for scripting: `GOCD_URL`, `GOCD_USERNAME`, `GOCD_P
 | `p` | pause/unpause (confirm) |
 | `f` | star/unstar as favorite |
 | `X` | cancel the currently running stage (confirm) |
+| `o` | open the selected run's commit on GitHub (or the pending diff when the deploy is behind) |
 | `/` | fuzzy-filter pipelines |
 | `r` | refresh |
 | `A` | connect / reconnect GoCD |
-| `@` | connect GitHub (optional, for private-repo stale-deploy checks) |
+| `@` | set a GitHub token (optional: `gh auth token` is picked up automatically if the GitHub CLI is signed in) |
 | `?` | help |
 | `q` / `ctrl-c` | quit |
 
@@ -106,7 +107,7 @@ server_url = "https://gocd.example.com/go"
 auth_token = "..."            # or username + password
 insecure_skip_verify = false  # true only for self-signed certs
 poll_interval_secs = 30       # background auto-refresh cadence
-github_token = "..."          # optional, for private-repo commit checks
+github_token = "..."          # optional; `gh auth token` is used automatically if unset
 ```
 
 The dashboard cache lives at `~/.config/lazygocd/dashboard_cache.json` and favorites at `~/.config/lazygocd/favorites.json`; both are safe to delete.
