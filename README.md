@@ -2,7 +2,7 @@
 
 # lazygocd
 
-**A fast terminal UI for [GoCD](https://www.gocd.org/), styled after [lazygit](https://github.com/jesseduffield/lazygit).**
+**A fast, keyboard-driven terminal UI for [GoCD](https://www.gocd.org/) pipelines.**
 
 [![Release](https://img.shields.io/github/v/release/Sahilll15/lazygocd)](https://github.com/Sahilll15/lazygocd/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -16,8 +16,7 @@
 
 Browse every pipeline group, drill into run history and stage/job details, tail live console logs, and trigger/pause/cancel builds — without leaving your terminal or waiting on the GoCD web UI.
 
-<!-- demo video goes here -->
-> 🎬 Demo video coming soon.
+![lazygocd demo](assets/demo.gif)
 
 ## Why
 
@@ -119,6 +118,19 @@ The dashboard cache lives at `~/.config/lazygocd/dashboard_cache.json` and favor
 - Opening a pipeline you've viewed before is instant (in-memory cache), and resting the cursor on a row for 300ms **prefetches** its history
 - The render loop only draws when something changed — **~0% CPU** while idle
 - A dead route (VPN drop) fails in seconds, not minutes, and never blocks the UI
+
+## Screenshots
+
+| Dashboard | Run history and details |
+|---|---|
+| ![dashboard](assets/dashboard.png) | ![history](assets/history.png) |
+
+<details>
+<summary>Live console log with tail-follow</summary>
+
+![console log](assets/console.png)
+
+</details>
 
 ## Compatibility
 

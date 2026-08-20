@@ -520,7 +520,7 @@ fn draw_detail(f: &mut Frame, app: &App, area: Rect) {
                 Style::default().fg(theme::WARNING),
             ),
             GithubState::Failed(_) => {
-                Span::styled("can't check (connect GitHub with 'G')", Style::default().fg(theme::MUTED))
+                Span::styled("can't check (connect GitHub with '@')", Style::default().fg(theme::MUTED))
             }
         };
         lines.push(Line::from(vec![label("Deployed: "), Span::raw(deployed_short), Span::raw("  "), status_span]));
