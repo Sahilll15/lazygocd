@@ -2,7 +2,7 @@
 name = "lazygocd"
 version = "0.1.0"
 edition = "2024"
-description = "A fast terminal UI for GoCD, styled after lazygit"
+description = "A fast, keyboard-driven terminal UI for GoCD pipelines"
 license = "MIT"
 repository = "https://github.com/Sahilll15/lazygocd"
 homepage = "https://github.com/Sahilll15/lazygocd"
