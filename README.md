@@ -1,0 +1,129 @@
+<div align="center">
+
+# lazygocd
+
+**A fast terminal UI for [GoCD](https://www.gocd.org/), styled after [lazygit](https://github.com/jesseduffield/lazygit).**
+
+[![Release](https://img.shields.io/github/v/release/Sahilll15/lazygocd)](https://github.com/Sahilll15/lazygocd/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Rust](https://img.shields.io/badge/built%20with-Rust-orange)](https://www.rust-lang.org/)
+
+[Documentation](https://lazygocd.vercel.app) · [Installation](#installation) · [Keybindings](#keybindings) · [Configuration](#configuration)
+
+</div>
+
+---
+
+Browse every pipeline group, drill into run history and stage/job details, tail live console logs, and trigger/pause/cancel builds — without leaving your terminal or waiting on the GoCD web UI.
+
+<!-- demo video goes here -->
+> 🎬 Demo video coming soon.
+
+## Why
+
+GoCD's web dashboard gets slow and clicky on large installations. lazygocd loads an entire 2,000+ pipeline instance in one request, caches it locally so the next launch is instant, and puts every common action one keystroke away.
+
+## Features
+
+- **Three-pane layout** — pipeline groups tree, run history, and stage/job details, `tab`/`esc` to move between them, full mouse support
+- **Act on pipelines** — trigger runs (`t`), pause/unpause (`p`), cancel a running stage (`X`), all with confirmation
+- **Live console logs** — open any job's log, auto-tail while it runs, scroll freely, `r` to refresh
+- **Fuzzy filter** — `/` then a few characters (`wabp` matches `web-app-build-prod`), matched letters highlighted
+- **Favorites** — star pipelines with `f`; they pin to a ★ section at the top
+- **Stale-deploy detection** — optional GitHub integration compares the deployed commit against the branch head and flags `⚠ not latest`
+- **Feels instant** — disk-cached dashboard renders before the network responds, history prefetches on hover, adaptive rendering idles at ~0% CPU
+- **Network-resilient** — cached data stays browsable through VPN drops; reconnect anytime with `A`
+
+## Installation
+
+### Homebrew (macOS/Linux)
+
+```sh
+brew install Sahilll15/tap/lazygocd
+```
+
+### Cargo
+
+```sh
+cargo install --git https://github.com/Sahilll15/lazygocd
+```
+
+### Binary releases
+
+Prebuilt binaries for macOS (Apple Silicon and Intel) and Linux x86_64 are on the [releases page](https://github.com/Sahilll15/lazygocd/releases):
+
+```sh
+tar xzf lazygocd-*.tar.gz
+mv lazygocd /usr/local/bin/
+```
+
+### From source
+
+```sh
+git clone https://github.com/Sahilll15/lazygocd
+cd lazygocd
+cargo build --release
+# binary at target/release/lazygocd
+```
+
+## Getting started
+
+Run `lazygocd`. On first launch it walks you through connecting inside the TUI itself: server URL (e.g. `https://gocd.example.com/go`), then username/password or a personal access token (recommended), then a TLS choice. The config is saved to `~/.config/lazygocd/config.toml` (mode `0600`) and you land straight in the dashboard. Press `A` anytime to reconnect or switch servers.
+
+Env vars override the config for scripting: `GOCD_URL`, `GOCD_USERNAME`, `GOCD_PASSWORD`, `GOCD_TOKEN`, `GOCD_INSECURE=1`, `GITHUB_TOKEN`.
+
+## Keybindings
+
+| Key | Action |
+|---|---|
+| `j`/`k`, `↓`/`↑` | move selection |
+| `g`/`G` | jump to top / bottom of the focused list |
+| `ctrl-d`/`ctrl-u`, `pgdn`/`pgup` | half-page down / up |
+| `l`/`enter`/`→` | expand group / open pipeline / open a job's console log |
+| `h`/`←` | collapse group |
+| `tab` | cycle focus: groups → history → details |
+| `esc` | back: details → history → groups; in groups, clear the filter |
+| `t` | trigger a new run (confirm) |
+| `p` | pause/unpause (confirm) |
+| `f` | star/unstar as favorite |
+| `X` | cancel the currently running stage (confirm) |
+| `/` | fuzzy-filter pipelines |
+| `r` | refresh |
+| `A` | connect / reconnect GoCD |
+| `@` | connect GitHub (optional, for private-repo stale-deploy checks) |
+| `?` | help |
+| `q` / `ctrl-c` | quit |
+
+Mouse: click focuses a pane and selects a row, click again to open, scroll wheel scrolls the pane under the cursor.
+
+In the console log view: `j`/`k` scroll, `g`/`G` top/bottom (`G` resumes auto-follow), `r` refresh, `q`/`esc` close.
+
+## Configuration
+
+`~/.config/lazygocd/config.toml`:
+
+```toml
+server_url = "https://gocd.example.com/go"
+auth_token = "..."            # or username + password
+insecure_skip_verify = false  # true only for self-signed certs
+poll_interval_secs = 30       # background auto-refresh cadence
+github_token = "..."          # optional, for private-repo commit checks
+```
+
+The dashboard cache lives at `~/.config/lazygocd/dashboard_cache.json` and favorites at `~/.config/lazygocd/favorites.json`; both are safe to delete.
+
+## How it stays fast
+
+- The whole dashboard (groups, pipelines, pause state, latest-run status) loads in **one gzip'd request** — measured at ~2s for a 185-group / 2,389-pipeline production instance
+- The last successful load is cached to disk, so every launch after the first renders **immediately** while a refresh runs behind it
+- Opening a pipeline you've viewed before is instant (in-memory cache), and resting the cursor on a row for 300ms **prefetches** its history
+- The render loop only draws when something changed — **~0% CPU** while idle
+- A dead route (VPN drop) fails in seconds, not minutes, and never blocks the UI
+
+## Compatibility
+
+Tested against GoCD 23.5.0. Uses the stable v1/v3/v4 JSON APIs plus the console-log file endpoint, so nearby versions should work fine. macOS and Linux; any terminal with 256-color support.
+
+## License
+
+[MIT](LICENSE)
