@@ -25,11 +25,13 @@ GoCD's web dashboard gets slow and clicky on large installations. lazygocd loads
 ## Features
 
 - **Three-pane layout** — pipeline groups tree, run history, and stage/job details, `tab`/`esc` to move between them, full mouse support
-- **Act on pipelines** — trigger runs (`t`), pause/unpause (`p`), cancel a running stage (`X`), all with confirmation
+- **Act on pipelines** — trigger runs (`t`), trigger with one-off environment variables (`T`), pause/unpause (`p`), cancel a running stage (`X`), rerun the failed jobs of a failed stage (`R`, or the whole stage), all with confirmation
 - **Live console logs** — auto-tail while the job runs, `/` search, and severity coloring (failures red, warnings yellow, successes green, agent chatter dimmed) so long logs actually scan
 - **Fuzzy filter** — `/` then a few characters (`wabp` matches `web-app-build-prod`), matched letters highlighted
 - **Favorites** — star pipelines with `f`; they pin to a ★ section at the top
-- **Stale-deploy detection** — compares each deployed commit against the branch head and flags `⚠ not latest`; uses your `gh` CLI token automatically, and `o` jumps to the commit or pending diff on GitHub
+- **Endless history** — reaching the bottom of the history pane loads older runs automatically, page by page
+- **Stale-deploy detection** — compares each deployed commit against the branch head and flags `⚠ not latest`, one check per git material when a pipeline has several; uses your `gh` CLI token automatically, and `o` jumps to the commit or pending diff on GitHub. GitHub Enterprise works too (`github_api_base`)
+- **Failure notifications** — a desktop notification when a favorited pipeline's latest run turns red (macOS/Linux, `notifications = false` to opt out)
 - **Feels instant** — disk-cached dashboard renders before the network responds, history prefetches on hover, adaptive rendering idles at ~0% CPU
 - **Network-resilient** — cached data stays browsable through VPN drops; reconnect anytime with `A`
 
@@ -90,10 +92,12 @@ Env vars override the config for scripting: `GOCD_URL`, `GOCD_USERNAME`, `GOCD_P
 | `tab` | cycle focus: groups → history → details |
 | `esc` | back: details → history → groups; in groups, clear the filter |
 | `t` | trigger a new run (confirm) |
+| `T` | trigger with environment variables — type `NAME=VALUE` entries, an empty entry finishes |
 | `p` | pause/unpause (confirm) |
 | `f` | star/unstar as favorite |
 | `y` | copy: commit SHA (history/details), pipeline/group name (tree), artifact URL (job view) |
 | `X` | cancel the currently running stage (confirm) |
+| `R` | rerun the failed jobs of the selected run's failed stage (`a` in the confirm reruns the whole stage) |
 | `o` | open the selected run's commit on GitHub (or the pending diff when the deploy is behind) |
 | `/` | fuzzy-filter pipelines |
 | `r` | refresh |
@@ -116,7 +120,11 @@ auth_token = "..."            # or username + password
 insecure_skip_verify = false  # true only for self-signed certs
 poll_interval_secs = 30       # background auto-refresh cadence
 github_token = "..."          # optional; `gh auth token` is used automatically if unset
+github_api_base = "https://api.github.com"  # GitHub Enterprise: point this at your GHE /api/v3
+notifications = true          # desktop notification when a favorited pipeline turns red
 ```
+
+Git materials on any host (`git@HOST:owner/repo.git` or `https://HOST/owner/repo`) are recognized; `o` opens commits on that host, and the stale-deploy check always queries `github_api_base` — for repos on a GitHub Enterprise instance, set it to `https://ghe.example.com/api/v3`.
 
 The dashboard cache lives at `~/.config/lazygocd/dashboard_cache.json` and favorites at `~/.config/lazygocd/favorites.json`; both are safe to delete.
 

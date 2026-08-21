@@ -1,6 +1,6 @@
 use crate::app::{
     App, ConsoleLogState, DetailRow, Focus, GithubState, JobTab, Modal, ReauthForm, ReauthMode, ReauthStep,
-    Row as TreeRow,
+    Row as TreeRow, TriggerVarsForm,
 };
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
@@ -52,6 +52,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
             Modal::Confirm { message, .. } => draw_confirm(f, area, &message),
             Modal::Reauth(form) => draw_reauth(f, area, &form),
             Modal::GithubConnect { input } => draw_github_connect(f, area, &input),
+            Modal::TriggerVars(form) => draw_trigger_vars(f, area, &form),
             Modal::ConsoleLog(state) => app.console_view_height = draw_console_log(f, area, &state, app.tick),
         }
     }
@@ -153,7 +154,7 @@ fn draw_footer(f: &mut Frame, app: &App, area: Rect) {
         ("g/G", "top/bottom"),
         ("enter", "open"),
         ("h", "collapse"),
-        ("t", "trigger"),
+        ("t/T", "trigger/+vars"),
         ("p", "pause"),
         ("f", "favorite"),
         ("y", "copy"),
@@ -169,15 +170,14 @@ fn draw_footer(f: &mut Frame, app: &App, area: Rect) {
         ("g/G", "top/bottom"),
         ("tab", "detail"),
         ("esc", "back"),
-        ("t", "trigger"),
+        ("t/T", "trigger/+vars"),
         ("p", "pause"),
         ("f", "favorite"),
         ("y", "copy"),
         ("X", "cancel"),
+        ("R", "rerun failed"),
         ("o", "commit"),
         ("r", "refresh"),
-        ("A", "gocd"),
-        ("@", "github"),
         ("?", "help"),
         ("q", "quit"),
     ];
@@ -187,11 +187,11 @@ fn draw_footer(f: &mut Frame, app: &App, area: Rect) {
         ("enter", "console log"),
         ("tab", "groups"),
         ("esc", "back"),
-        ("t", "trigger"),
+        ("t/T", "trigger/+vars"),
         ("p", "pause"),
-        ("f", "favorite"),
         ("y", "copy"),
         ("X", "cancel"),
+        ("R", "rerun failed"),
         ("o", "commit"),
         ("r", "refresh"),
         ("?", "help"),
@@ -502,34 +502,38 @@ fn draw_detail(f: &mut Frame, app: &App, area: Rect) {
         }
     }
 
-    // The GitHub comparison only applies to the latest run's material, not whichever
+    // The GitHub comparison only applies to the latest run's materials, not whichever
     // older row happens to be selected in the history table above.
-    if app.history_selected == 0
-        && let Some(git_ref) = &app.github_ref
-    {
+    if app.history_selected == 0 && !app.github_checks.is_empty() {
         lines.push(Line::from(""));
-        lines.push(Line::from(vec![
-            label("GitHub: "),
-            Span::raw(format!("{}/{}@{}", git_ref.owner, git_ref.repo, git_ref.branch)),
-        ]));
-        let deployed_short = short_sha(&git_ref.deployed_sha);
-        let status_span = match &app.github_state {
-            GithubState::Idle => Span::styled("(not checked)", Style::default().fg(theme::MUTED)),
-            GithubState::Checking => {
-                Span::styled(format!("{} checking...", spinner(app.tick)), Style::default().fg(theme::MUTED))
-            }
-            GithubState::Found(latest) if latest == &git_ref.deployed_sha => {
-                Span::styled("\u{2713} up to date", Style::default().fg(theme::SUCCESS))
-            }
-            GithubState::Found(latest) => Span::styled(
-                format!("\u{26a0} not latest (latest {})", short_sha(latest)),
-                Style::default().fg(theme::WARNING),
-            ),
-            GithubState::Failed(_) => {
-                Span::styled("can't check (connect GitHub with '@')", Style::default().fg(theme::MUTED))
-            }
-        };
-        lines.push(Line::from(vec![label("Deployed: "), Span::raw(deployed_short), Span::raw("  "), status_span]));
+        for (git_ref, state) in &app.github_checks {
+            // Only surface non-github.com hosts; the default host is just noise.
+            let host = if git_ref.host == "github.com" { String::new() } else { format!("{}/", git_ref.host) };
+            let status_span = match state {
+                GithubState::Idle => Span::styled("(not checked)", Style::default().fg(theme::MUTED)),
+                GithubState::Checking => {
+                    Span::styled(format!("{} checking...", spinner(app.tick)), Style::default().fg(theme::MUTED))
+                }
+                GithubState::Found(latest) if latest == &git_ref.deployed_sha => {
+                    Span::styled("\u{2713} up to date", Style::default().fg(theme::SUCCESS))
+                }
+                GithubState::Found(latest) => Span::styled(
+                    format!("\u{26a0} not latest (latest {})", short_sha(latest)),
+                    Style::default().fg(theme::WARNING),
+                ),
+                GithubState::Failed(_) => {
+                    Span::styled("can't check (connect GitHub with '@')", Style::default().fg(theme::MUTED))
+                }
+            };
+            lines.push(Line::from(vec![
+                label("GitHub: "),
+                Span::raw(format!("{host}{}/{}@{}", git_ref.owner, git_ref.repo, git_ref.branch)),
+                Span::raw("  "),
+                Span::styled(short_sha(&git_ref.deployed_sha), Style::default().fg(theme::ACCENT)),
+                Span::raw("  "),
+                status_span,
+            ]));
+        }
     }
 
     f.render_widget(Paragraph::new(lines).block(block).wrap(Wrap { trim: false }), area);
@@ -583,11 +587,13 @@ fn draw_help(f: &mut Frame, area: Rect) {
         Line::from("tab          cycle focus: groups -> history -> details -> groups"),
         Line::from("esc          back: details -> history -> groups; in groups, clear filter"),
         Line::from("t            trigger selected pipeline"),
+        Line::from("T            trigger with environment variables (NAME=VALUE entries)"),
         Line::from("p            pause/unpause selected pipeline"),
         Line::from("f            star/unstar selected pipeline as a favorite"),
         Line::from("o            open the run's commit on GitHub (or the pending diff)"),
         Line::from("y            copy commit sha / pipeline name to the clipboard"),
         Line::from("X            cancel the currently running stage"),
+        Line::from("R            rerun failed jobs of a failed stage ('a' in the confirm = whole stage)"),
         Line::from("/            fuzzy-filter pipelines by name"),
         Line::from("r            refresh"),
         Line::from("A            connect / reconnect GoCD"),
@@ -599,6 +605,8 @@ fn draw_help(f: &mut Frame, area: Rect) {
         Line::from("click        focus pane / select row; click a selected row to open it"),
         Line::from("wheel        scroll the pane under the cursor (or the console log)"),
         Line::from(""),
+        Line::from(Span::styled("in the history pane:", Style::default().fg(theme::MUTED))),
+        Line::from("             older runs load automatically when you reach the bottom row"),
         Line::from(Span::styled("in the details pane:", Style::default().fg(theme::MUTED))),
         Line::from("enter        open the selected job's console log"),
         Line::from(Span::styled("in the console log view:", Style::default().fg(theme::MUTED))),
@@ -616,12 +624,54 @@ fn draw_confirm(f: &mut Frame, area: Rect, message: &str) {
     let rect = centered_rect(50, 20, area);
     f.render_widget(Clear, rect);
     let block = styled_block("Confirm", theme::WARNING);
-    let text = vec![
-        Line::from(message.to_string()),
-        Line::from(""),
-        Line::from(Span::styled("y/enter confirm   n/esc cancel", Style::default().fg(theme::MUTED))),
-    ];
+    // Multi-line messages (e.g. the rerun modal's 'a' option) split into Lines;
+    // a \n inside a single Line renders literally.
+    let mut text: Vec<Line> = message.lines().map(|l| Line::from(l.to_string())).collect();
+    text.push(Line::from(""));
+    text.push(Line::from(Span::styled("y/enter confirm   n/esc cancel", Style::default().fg(theme::MUTED))));
     f.render_widget(Paragraph::new(text).block(block).wrap(Wrap { trim: false }), rect);
+}
+
+/// 'T' trigger-with-variables: entered NAME=VALUE pairs stack up as summary
+/// lines, an empty entry flips to the confirm step.
+fn draw_trigger_vars(f: &mut Frame, area: Rect, form: &TriggerVarsForm) {
+    let rect = centered_rect(60, 55, area);
+    f.render_widget(Clear, rect);
+    let block = styled_block(format!("Trigger {} with variables", form.pipeline), theme::ACCENT);
+
+    let mut lines: Vec<Line> = Vec::new();
+    for (name, value) in &form.vars {
+        lines.push(summary_line(name, value));
+    }
+    if !form.vars.is_empty() {
+        lines.push(Line::from(""));
+    }
+    if form.confirming {
+        lines.push(Line::from(format!(
+            "Trigger a new run of '{}' with {} variable(s)?",
+            form.pipeline,
+            form.vars.len()
+        )));
+        lines.push(Line::from(""));
+        lines.push(Line::from(Span::styled(
+            "y/enter trigger   n/esc cancel   backspace edit",
+            Style::default().fg(theme::MUTED),
+        )));
+    } else {
+        lines.push(field_label("Environment variable (NAME=VALUE)"));
+        lines.push(Line::from(Span::styled(
+            "enter adds another; an empty entry finishes",
+            Style::default().fg(theme::MUTED),
+        )));
+        lines.push(Line::from(""));
+        lines.push(input_line(&form.input, false));
+        if let Some(err) = &form.error {
+            lines.push(Line::from(Span::styled(err.clone(), Style::default().fg(theme::DANGER))));
+        }
+        lines.push(Line::from(""));
+        lines.push(Line::from(Span::styled("enter add/finish   esc cancel", Style::default().fg(theme::MUTED))));
+    }
+    f.render_widget(Paragraph::new(lines).block(block).wrap(Wrap { trim: false }), rect);
 }
 
 /// Returns the content viewport height so scroll-up clamping can use it.

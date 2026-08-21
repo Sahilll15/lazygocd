@@ -99,8 +99,27 @@ impl DashboardPipeline {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct HistoryResponse {
+    #[serde(rename = "_links", default)]
+    pub links: Option<HistoryLinks>,
     #[serde(default)]
     pub pipelines: Vec<PipelineInstance>,
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct HistoryLinks {
+    #[serde(default)]
+    pub next: Option<Link>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct Link {
+    pub href: String,
+}
+
+/// Cursor for the next history page, parsed from _links.next.href's ?after=<n>.
+pub fn next_page_cursor(href: &str) -> Option<u64> {
+    let query = href.split('?').nth(1)?;
+    query.split('&').find_map(|kv| kv.strip_prefix("after=")).and_then(|v| v.parse().ok())
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -193,16 +212,25 @@ pub struct Modification {
     pub modified_time: Option<i64>,
 }
 
-/// A GitHub repo/branch/commit this pipeline instance was built from, parsed
-/// from its first direct Git material. Chained pipelines whose only material
-/// is an upstream GoCD pipeline (not raw git) yield None - there's no single
+/// A git-host repo/branch/commit this pipeline instance was built from, parsed
+/// from a direct Git material. Chained pipelines whose only material is an
+/// upstream GoCD pipeline (not raw git) yield none - there's no single
 /// commit to compare without walking the whole dependency chain.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GitRef {
+    /// e.g. "github.com" or a GitHub Enterprise host; drives browser URLs.
+    pub host: String,
     pub owner: String,
     pub repo: String,
     pub branch: String,
     pub deployed_sha: String,
+}
+
+impl GitRef {
+    /// Identity used to match an async check result back to its material.
+    pub fn key(&self) -> String {
+        format!("{}/{}/{}@{}", self.host, self.owner, self.repo, self.branch)
+    }
 }
 
 impl PipelineInstance {
@@ -214,13 +242,25 @@ impl PipelineInstance {
             .find(|mr| mr.material.kind.as_deref() == Some("Git"))
     }
 
+    /// Every direct Git material of this run, in material order.
+    pub fn git_refs(&self) -> Vec<GitRef> {
+        let Some(cause) = &self.build_cause else { return Vec::new() };
+        cause
+            .material_revisions
+            .iter()
+            .filter(|mr| mr.material.kind.as_deref() == Some("Git"))
+            .filter_map(|mr| {
+                let desc = mr.material.description.as_deref()?;
+                let (host, owner, repo) = parse_git_host_owner_repo(desc)?;
+                let branch = parse_branch(desc).unwrap_or_else(|| "main".to_string());
+                let deployed_sha = mr.modifications.first()?.revision.clone()?;
+                Some(GitRef { host, owner, repo, branch, deployed_sha })
+            })
+            .collect()
+    }
+
     pub fn git_ref(&self) -> Option<GitRef> {
-        let mr = self.first_git_revision()?;
-        let desc = mr.material.description.as_deref()?;
-        let (owner, repo) = parse_github_owner_repo(desc)?;
-        let branch = parse_branch(desc).unwrap_or_else(|| "main".to_string());
-        let deployed_sha = mr.modifications.first()?.revision.clone()?;
-        Some(GitRef { owner, repo, branch, deployed_sha })
+        self.git_refs().into_iter().next()
     }
 
     /// The commit that triggered this run, if it has a direct Git material.
@@ -230,19 +270,21 @@ impl PipelineInstance {
 }
 
 /// GoCD's Git material description reads like:
-/// "URL: git@github.com:owner/repo.git, Branch: main"
-fn parse_github_owner_repo(desc: &str) -> Option<(String, String)> {
+/// "URL: git@HOST:owner/repo.git, Branch: main" or "URL: https://HOST/owner/repo, ..."
+fn parse_git_host_owner_repo(desc: &str) -> Option<(String, String, String)> {
     let after = desc.split("URL: ").nth(1)?;
     let url = after.split(',').next()?.trim();
-    let rest = url
-        .strip_prefix("git@github.com:")
-        .or_else(|| url.strip_prefix("https://github.com/"))
-        .or_else(|| url.strip_prefix("http://github.com/"))?;
-    let rest = rest.trim_end_matches(".git");
-    let mut parts = rest.splitn(2, '/');
-    let owner = parts.next()?.to_string();
-    let repo = parts.next()?.to_string();
-    (!owner.is_empty() && !repo.is_empty()).then_some((owner, repo))
+    let (host, rest) = if let Some(ssh) = url.strip_prefix("git@") {
+        ssh.split_once(':')?
+    } else {
+        let no_scheme = url.strip_prefix("https://").or_else(|| url.strip_prefix("http://"))?;
+        no_scheme.split_once('/')?
+    };
+    let rest = rest.trim_start_matches('/').trim_end_matches('/').trim_end_matches(".git");
+    let (owner, repo) = rest.split_once('/')?;
+    (!host.is_empty() && !owner.is_empty() && !repo.is_empty()).then(|| {
+        (host.to_string(), owner.to_string(), repo.to_string())
+    })
 }
 
 fn parse_branch(desc: &str) -> Option<String> {
@@ -332,4 +374,108 @@ pub fn flatten_artifacts(nodes: &[ArtifactNode]) -> Vec<ArtifactRow> {
     let mut out = Vec::new();
     walk(nodes, 0, &mut out);
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn next_page_cursor_parses_after_param() {
+        assert_eq!(next_page_cursor("http://go/api/pipelines/x/history?after=205"), Some(205));
+        assert_eq!(next_page_cursor("/go/api/pipelines/x/history?page_size=10&after=42"), Some(42));
+        assert_eq!(next_page_cursor("/go/api/pipelines/x/history?after=42&page_size=10"), Some(42));
+        assert_eq!(next_page_cursor("/go/api/pipelines/x/history"), None);
+        assert_eq!(next_page_cursor("/history?before=9"), None);
+        assert_eq!(next_page_cursor("/history?after=notanumber"), None);
+    }
+
+    #[test]
+    fn parse_host_owner_repo_forms() {
+        let f = |desc: &str| parse_git_host_owner_repo(desc);
+        assert_eq!(
+            f("URL: git@github.com:acme/web-app.git, Branch: main"),
+            Some(("github.com".into(), "acme".into(), "web-app".into()))
+        );
+        assert_eq!(
+            f("URL: https://github.com/acme/web-app, Branch: main"),
+            Some(("github.com".into(), "acme".into(), "web-app".into()))
+        );
+        assert_eq!(
+            f("URL: git@ghe.corp.io:platform/deploy.git, Branch: release"),
+            Some(("ghe.corp.io".into(), "platform".into(), "deploy".into()))
+        );
+        assert_eq!(
+            f("URL: https://ghe.corp.io/platform/deploy.git, Branch: release"),
+            Some(("ghe.corp.io".into(), "platform".into(), "deploy".into()))
+        );
+        assert_eq!(
+            f("URL: http://git.internal/team/tool, Branch: dev"),
+            Some(("git.internal".into(), "team".into(), "tool".into()))
+        );
+        assert_eq!(f("URL: /local/bare/repo.git, Branch: main"), None);
+        assert_eq!(f("no url here"), None);
+        assert_eq!(f("URL: https://host/only-owner, Branch: x"), None);
+    }
+
+    fn git_revision(url: &str, branch: &str, sha: &str) -> MaterialRevision {
+        MaterialRevision {
+            material: MaterialInfo {
+                kind: Some("Git".into()),
+                description: Some(format!("URL: {url}, Branch: {branch}")),
+            },
+            modifications: vec![Modification {
+                revision: Some(sha.into()),
+                user_name: None,
+                comment: None,
+                modified_time: None,
+            }],
+        }
+    }
+
+    #[test]
+    fn git_refs_returns_all_git_materials_in_order() {
+        let inst = PipelineInstance {
+            name: "p".into(),
+            label: "l".into(),
+            counter: 1,
+            comment: None,
+            scheduled_date: None,
+            stages: Vec::new(),
+            build_cause: Some(BuildCause {
+                trigger_message: None,
+                approver: None,
+                material_revisions: vec![
+                    git_revision("git@github.com:acme/web-app.git", "main", "aaa"),
+                    // Non-git materials (upstream pipelines) must be skipped, not error.
+                    MaterialRevision {
+                        material: MaterialInfo { kind: Some("Pipeline".into()), description: None },
+                        modifications: Vec::new(),
+                    },
+                    git_revision("https://ghe.corp.io/platform/deploy", "release", "bbb"),
+                ],
+            }),
+        };
+        let refs = inst.git_refs();
+        assert_eq!(refs.len(), 2);
+        assert_eq!((refs[0].host.as_str(), refs[0].repo.as_str(), refs[0].deployed_sha.as_str()), ("github.com", "web-app", "aaa"));
+        assert_eq!((refs[1].host.as_str(), refs[1].branch.as_str(), refs[1].deployed_sha.as_str()), ("ghe.corp.io", "release", "bbb"));
+        assert_eq!(inst.git_ref().unwrap().deployed_sha, "aaa");
+        assert_eq!(refs[0].key(), "github.com/acme/web-app@main");
+    }
+
+    #[test]
+    fn git_refs_empty_without_git_materials() {
+        let inst = PipelineInstance {
+            name: "p".into(),
+            label: "l".into(),
+            counter: 1,
+            comment: None,
+            scheduled_date: None,
+            stages: Vec::new(),
+            build_cause: None,
+        };
+        assert!(inst.git_refs().is_empty());
+        assert!(inst.git_ref().is_none());
+    }
 }
