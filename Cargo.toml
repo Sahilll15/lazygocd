@@ -1,6 +1,6 @@
 [package]
 name = "lazygocd"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2024"
 description = "A fast, keyboard-driven terminal UI for GoCD pipelines"
 license = "MIT"
@@ -25,7 +25,7 @@ clap_mangen = "0.3.3"
 crossterm = "0.29.0"
 dirs = "6.0.0"
 ratatui = "0.30.2"
-reqwest = { version = "0.13.4", features = ["blocking", "form", "gzip", "json"] }
+reqwest = { version = "0.13.4", features = ["blocking", "form", "gzip", "json", "query"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
 toml = "1.1.4"

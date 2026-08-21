@@ -479,3 +479,31 @@ mod tests {
         assert!(inst.git_ref().is_none());
     }
 }
+
+/// A personalized dashboard view ("filter") from GoCD's pipeline_selection API -
+/// the same custom tabs users create in the web dashboard.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ViewFilters {
+    #[serde(default)]
+    pub filters: Vec<ViewFilter>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ViewFilter {
+    pub name: String,
+    /// "whitelist" (only these pipelines) or "blacklist" (all except these).
+    #[serde(rename = "type", default)]
+    pub kind: String,
+    /// Status filter (e.g. ["failing"]); preserved verbatim on round-trips.
+    #[serde(default)]
+    pub state: Vec<String>,
+    #[serde(default)]
+    pub pipelines: Vec<String>,
+}
+
+impl ViewFilter {
+    pub fn matches(&self, pipeline: &str) -> bool {
+        let listed = self.pipelines.iter().any(|p| p == pipeline);
+        if self.kind == "blacklist" { !listed } else { listed }
+    }
+}

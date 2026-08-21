@@ -54,6 +54,8 @@ pub fn draw(f: &mut Frame, app: &mut App) {
             Modal::GithubConnect { input } => draw_github_connect(f, area, &input),
             Modal::TriggerVars(form) => draw_trigger_vars(f, area, &form),
             Modal::ConsoleLog(state) => app.console_view_height = draw_console_log(f, area, &state, app.tick),
+            Modal::ViewPicker { selected } => draw_view_picker(f, area, app, selected),
+            Modal::SaveView { input, pipelines } => draw_save_view(f, area, &input, pipelines.len()),
         }
     }
 }
@@ -74,6 +76,13 @@ fn draw_header(f: &mut Frame, app: &App, area: Rect) {
         Span::raw(" "),
         Span::styled(&app.server_url, Style::default().fg(theme::MUTED)),
     ];
+    if let Some(view) = app.active_view.and_then(|i| app.views.get(i)) {
+        spans.push(Span::raw("  "));
+        spans.push(Span::styled(
+            format!("[{}]", view.name),
+            Style::default().fg(theme::FAVORITE).add_modifier(Modifier::BOLD),
+        ));
+    }
     if let Some(err) = &app.error_line {
         spans.push(Span::raw("  "));
         spans.push(Span::styled(format!("! {err}"), Style::default().fg(theme::DANGER)));
@@ -159,6 +168,8 @@ fn draw_footer(f: &mut Frame, app: &App, area: Rect) {
         ("f", "favorite"),
         ("y", "copy"),
         ("/", "filter"),
+        ("v", "views"),
+        ("V", "save view"),
         ("r", "refresh"),
         ("A", "gocd"),
         ("@", "github"),
@@ -937,6 +948,43 @@ fn console_body_style(marker: &str, body: &str) -> Style {
     } else {
         Style::default()
     }
+}
+
+fn draw_save_view(f: &mut Frame, area: Rect, input: &str, count: usize) {
+    let rect = centered_rect(55, 35, area);
+    f.render_widget(Clear, rect);
+    let block = styled_block("Save view", theme::ACCENT);
+    let lines = vec![
+        field_label("Save current filter matches as a GoCD view"),
+        Line::from(Span::styled(
+            format!("{count} pipelines will be in this view (shows in the web UI too)"),
+            Style::default().fg(theme::MUTED),
+        )),
+        Line::from(""),
+        input_line(input, false),
+        Line::from(""),
+        Line::from(Span::styled("enter save   esc cancel", Style::default().fg(theme::MUTED))),
+    ];
+    f.render_widget(Paragraph::new(lines).block(block).wrap(Wrap { trim: false }), rect);
+}
+
+fn draw_view_picker(f: &mut Frame, area: Rect, app: &App, selected: usize) {
+    let rect = centered_rect(50, 55, area);
+    f.render_widget(Clear, rect);
+    let block = styled_block("Views", theme::ACCENT);
+
+    let mut lines = vec![field_label("Personalized dashboard views"), Line::from("")];
+    lines.push(choice_line("All pipelines", selected == 0));
+    for (i, v) in app.views.iter().enumerate() {
+        let label = format!("{} ({})", v.name, v.pipelines.len());
+        lines.push(choice_line(&label, selected == i + 1));
+    }
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled(
+        "j/k select   enter apply   esc close",
+        Style::default().fg(theme::MUTED),
+    )));
+    f.render_widget(Paragraph::new(lines).block(block).wrap(Wrap { trim: false }), rect);
 }
 
 fn draw_github_connect(f: &mut Frame, area: Rect, input: &str) {

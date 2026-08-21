@@ -1,5 +1,5 @@
 use crate::config::Config;
-use crate::model::{ArtifactNode, DashboardEmbedded, DashboardResponse, HistoryResponse, PipelineInstance};
+use crate::model::{ArtifactNode, DashboardEmbedded, DashboardResponse, HistoryResponse, PipelineInstance, ViewFilters};
 use anyhow::{Context, Result};
 use reqwest::blocking::{Client, RequestBuilder};
 use reqwest::Method;
@@ -67,8 +67,16 @@ impl GoCdClient {
     /// real GoCD 23.5.0 instance; per-pipeline status polling doesn't scale.
     /// Pass the previous ETag to let the server answer 304 (returns Ok(None)),
     /// which skips the multi-MB payload on unchanged polls.
-    pub fn fetch_dashboard(&self, etag: Option<&str>) -> Result<Option<(DashboardEmbedded, Option<String>)>> {
+    pub fn fetch_dashboard(
+        &self,
+        etag: Option<&str>,
+        view: Option<&str>,
+    ) -> Result<Option<(DashboardEmbedded, Option<String>)>> {
         let mut rb = self.request(Method::GET, "/api/dashboard", 4);
+        if let Some(name) = view {
+            // The server filters to the personalized view, same as the web UI's tabs.
+            rb = rb.query(&[("viewName", name)]);
+        }
         if let Some(tag) = etag {
             rb = rb.header("If-None-Match", tag);
         }
@@ -250,6 +258,58 @@ impl GoCdClient {
         if !status.is_success() {
             let body = resp.text().unwrap_or_default();
             anyhow::bail!("GoCD returned {status} cancelling stage: {}", truncate(&body));
+        }
+        Ok(())
+    }
+
+    /// The user's personalized dashboard views plus the optimistic-lock ETag.
+    /// Internal (unversioned-contract) endpoint, but stable in practice - the
+    /// web dashboard itself uses it.
+    pub fn fetch_views(&self) -> Result<(ViewFilters, Option<String>)> {
+        let resp = self
+            .request(Method::GET, "/api/internal/pipeline_selection", 1)
+            .send()
+            .context("requesting personalized views")?;
+        let status = resp.status();
+        let etag = resp
+            .headers()
+            .get(reqwest::header::ETAG)
+            .and_then(|v| v.to_str().ok())
+            .map(|t| t.replace("--gzip", ""));
+        let body = resp.text().context("reading views body")?;
+        if !status.is_success() {
+            anyhow::bail!("GoCD returned {status} for pipeline_selection: {}", truncate(&body));
+        }
+        let filters = serde_json::from_str(&body).with_context(|| format!("parsing views: {}", truncate(&body)))?;
+        Ok((filters, etag))
+    }
+
+    /// Create or update a personalized view: fetch-fresh, upsert, PUT back with
+    /// If-Match so a concurrent web-UI edit fails loudly instead of being lost.
+    pub fn save_view(&self, name: &str, pipelines: Vec<String>) -> Result<()> {
+        let (mut current, etag) = self.fetch_views()?;
+        let new_filter = crate::model::ViewFilter {
+            name: name.to_string(),
+            kind: "whitelist".to_string(),
+            state: Vec::new(),
+            pipelines,
+        };
+        match current.filters.iter_mut().find(|f| f.name == name) {
+            Some(existing) => *existing = new_filter,
+            None => current.filters.push(new_filter),
+        }
+        let mut rb = self
+            .request(Method::PUT, "/api/internal/pipeline_selection", 1)
+            .header("Content-Type", "application/json")
+            .json(&current);
+        if let Some(tag) = etag {
+            rb = rb.header("If-Match", tag);
+        }
+        let resp = rb.send().context("saving view")?;
+        let status = resp.status();
+        if !status.is_success() {
+            let body = resp.text().unwrap_or_default();
+            anyhow::bail!("GoCD returned {status} saving view: {}", truncate(&body));
         }
         Ok(())
     }
