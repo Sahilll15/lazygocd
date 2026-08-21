@@ -40,8 +40,34 @@ jobs:
             target/${{ matrix.target }}/release/lazygocd-*.tar.gz
             target/${{ matrix.target }}/release/lazygocd-*.sha256
 
+  build-windows:
+    name: Build x86_64-pc-windows-msvc
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+      - name: Build
+        run: cargo build --release --target x86_64-pc-windows-msvc
+      - name: Package
+        shell: pwsh
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          $name = "lazygocd-$env:REF_NAME-x86_64-pc-windows-msvc"
+          Compress-Archive -Path target/x86_64-pc-windows-msvc/release/lazygocd.exe -DestinationPath "$name.zip"
+          $hash = (Get-FileHash "$name.zip" -Algorithm SHA256).Hash.ToLower()
+          "$hash  $name.zip" | Out-File -Encoding ascii "$name.zip.sha256"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: x86_64-pc-windows-msvc
+          path: |
+            lazygocd-*.zip
+            lazygocd-*.sha256
+
   release:
-    needs: build
+    needs: [build, build-windows]
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/download-artifact@v4
@@ -51,5 +77,6 @@ jobs:
         with:
           files: |
             lazygocd-*.tar.gz
+            lazygocd-*.zip
             lazygocd-*.sha256
           generate_release_notes: true
