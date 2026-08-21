@@ -13,7 +13,11 @@ fn send(title: &str, body: &str) {
     // transition detection is verifiable headless.
     if let Ok(path) = std::env::var("LAZYGOCD_NOTIFY_LOG") {
         use std::io::Write;
-        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+        if let Ok(mut f) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+        {
             let _ = writeln!(f, "{title}|{body}");
         }
         return;
@@ -43,7 +47,11 @@ fn send(title: &str, body: &str) {
 
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 fn applescript(title: &str, body: &str) -> String {
-    format!("display notification \"{}\" with title \"{}\"", escape(body), escape(title))
+    format!(
+        "display notification \"{}\" with title \"{}\"",
+        escape(body),
+        escape(title)
+    )
 }
 
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]

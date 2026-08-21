@@ -1,7 +1,10 @@
 use crate::api::GoCdClient;
 use crate::config::Config;
 use crate::github::GitHubClient;
-use crate::model::{ArtifactNode, DashboardGroup, DashboardPipeline, GitRef, PipelineInstance, ViewFilter, flatten_artifacts};
+use crate::model::{
+    ArtifactNode, DashboardGroup, DashboardPipeline, GitRef, PipelineInstance, ViewFilter,
+    flatten_artifacts,
+};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use ratatui::layout::Rect;
 use ratatui::widgets::{ListState, TableState};
@@ -21,12 +24,30 @@ pub enum Focus {
 #[derive(Debug, Clone)]
 pub enum PendingAction {
     Trigger(String),
-    TriggerWithVars { pipeline: String, vars: Vec<(String, String)> },
+    TriggerWithVars {
+        pipeline: String,
+        vars: Vec<(String, String)>,
+    },
     Pause(String),
     Unpause(String),
-    CancelStage { pipeline: String, pipeline_counter: i64, stage: String, stage_counter: String },
-    RerunFailedJobs { pipeline: String, pipeline_counter: i64, stage: String, stage_counter: String },
-    RerunStage { pipeline: String, pipeline_counter: i64, stage: String, stage_counter: String },
+    CancelStage {
+        pipeline: String,
+        pipeline_counter: i64,
+        stage: String,
+        stage_counter: String,
+    },
+    RerunFailedJobs {
+        pipeline: String,
+        pipeline_counter: i64,
+        stage: String,
+        stage_counter: String,
+    },
+    RerunStage {
+        pipeline: String,
+        pipeline_counter: i64,
+        stage: String,
+        stage_counter: String,
+    },
 }
 
 impl PendingAction {
@@ -171,15 +192,25 @@ pub struct TriggerVarsForm {
 #[derive(Debug, Clone)]
 pub enum Modal {
     Help,
-    Confirm { action: PendingAction, message: String },
+    Confirm {
+        action: PendingAction,
+        message: String,
+    },
     Reauth(ReauthForm),
-    GithubConnect { input: String },
+    GithubConnect {
+        input: String,
+    },
     TriggerVars(TriggerVarsForm),
     ConsoleLog(Box<ConsoleLogState>),
     /// Personalized-view picker; index 0 = "All pipelines", then one per view.
-    ViewPicker { selected: usize },
+    ViewPicker {
+        selected: usize,
+    },
     /// Name input for saving the current fuzzy-filter matches as a new view.
-    SaveView { input: String, pipelines: Vec<String> },
+    SaveView {
+        input: String,
+        pipelines: Vec<String>,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -195,8 +226,13 @@ pub enum GithubState {
 pub enum Row {
     FavoritesHeader,
     FavoritePipeline(String),
-    Group { idx: usize },
-    Pipeline { group_idx: usize, pipeline_idx: usize },
+    Group {
+        idx: usize,
+    },
+    Pipeline {
+        group_idx: usize,
+        pipeline_idx: usize,
+    },
 }
 
 /// Name-based identity of a tree row, so the cursor survives dashboard
@@ -222,7 +258,12 @@ pub enum ApiEvent {
     /// A later page to append. `issued_last_counter` is the counter of the last
     /// loaded run when the fetch started - if it moved (a refresh interleaved),
     /// the page is stale and dropped.
-    HistoryMore { name: String, after: u64, issued_last_counter: i64, result: Result<HistoryPage, String> },
+    HistoryMore {
+        name: String,
+        after: u64,
+        issued_last_counter: i64,
+        result: Result<HistoryPage, String>,
+    },
     ActionDone(PendingAction, Result<String, String>),
     /// (pipeline, GitRef::key() of the material this check was for, result).
     GithubLatest(String, String, Result<String, String>),
@@ -340,7 +381,9 @@ fn load_favorites() -> HashSet<String> {
 
 fn save_favorites(favorites: HashSet<String>) {
     thread::spawn(move || {
-        let Ok(path) = crate::config::favorites_path() else { return };
+        let Ok(path) = crate::config::favorites_path() else {
+            return;
+        };
         let mut names: Vec<&String> = favorites.iter().collect();
         names.sort();
         if let Ok(text) = serde_json::to_string(&names) {
@@ -351,12 +394,18 @@ fn save_favorites(favorites: HashSet<String>) {
 
 fn save_dashboard_cache(groups: Vec<DashboardGroup>, pipelines: Vec<DashboardPipeline>) {
     thread::spawn(move || {
-        let Ok(path) = crate::config::dashboard_cache_path() else { return };
+        let Ok(path) = crate::config::dashboard_cache_path() else {
+            return;
+        };
         let saved_at_ms = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_millis() as i64)
             .unwrap_or(0);
-        let cache = DashboardCache { saved_at_ms, groups, pipelines };
+        let cache = DashboardCache {
+            saved_at_ms,
+            groups,
+            pipelines,
+        };
         if let Ok(text) = serde_json::to_string(&cache) {
             let _ = std::fs::write(path, text);
         }
@@ -376,13 +425,25 @@ impl App {
         let (groups, pipeline_info, status_line) = match cached {
             Some(c) => {
                 let age = format_age(c.saved_at_ms);
-                let info = c.pipelines.into_iter().map(|p| (p.name.clone(), p)).collect();
-                (c.groups, info, format!("Showing cached data ({age}), refreshing..."))
+                let info = c
+                    .pipelines
+                    .into_iter()
+                    .map(|p| (p.name.clone(), p))
+                    .collect();
+                (
+                    c.groups,
+                    info,
+                    format!("Showing cached data ({age}), refreshing..."),
+                )
             }
             None => (
                 Vec::new(),
                 HashMap::new(),
-                if needs_setup { "Connect to a GoCD server to get started".to_string() } else { "Loading dashboard...".to_string() },
+                if needs_setup {
+                    "Connect to a GoCD server to get started".to_string()
+                } else {
+                    "Loading dashboard...".to_string()
+                },
             ),
         };
         let has_cache = !groups.is_empty();
@@ -453,7 +514,10 @@ impl App {
         let tx = self.tx.clone();
         let generation = self.server_gen;
         thread::spawn(move || {
-            let result = client.fetch_views().map(|(v, _)| v.filters).map_err(|e| format!("{e:#}"));
+            let result = client
+                .fetch_views()
+                .map(|(v, _)| v.filters)
+                .map_err(|e| format!("{e:#}"));
             let _ = tx.send(ApiEvent::Views(generation, result));
         });
     }
@@ -463,7 +527,10 @@ impl App {
         let tx = self.tx.clone();
         let generation = self.server_gen;
         let etag = self.dashboard_etag.clone();
-        let view = self.active_view.and_then(|i| self.views.get(i)).map(|v| v.name.clone());
+        let view = self
+            .active_view
+            .and_then(|i| self.views.get(i))
+            .map(|v| v.name.clone());
         thread::spawn(move || {
             let result = client
                 .fetch_dashboard(etag.as_deref(), view.as_deref())
@@ -478,7 +545,9 @@ impl App {
         let client = self.client.clone();
         let tx = self.tx.clone();
         thread::spawn(move || {
-            let result = client.fetch_history_page(&name, None).map_err(|e| format!("{e:#}"));
+            let result = client
+                .fetch_history_page(&name, None)
+                .map_err(|e| format!("{e:#}"));
             let _ = tx.send(ApiEvent::History(name, result));
         });
     }
@@ -489,7 +558,9 @@ impl App {
         let client = self.client.clone();
         let tx = self.tx.clone();
         thread::spawn(move || {
-            let result = client.fetch_history_page(&name, None).map_err(|e| format!("{e:#}"));
+            let result = client
+                .fetch_history_page(&name, None)
+                .map_err(|e| format!("{e:#}"));
             let _ = tx.send(ApiEvent::History(name, result));
         });
     }
@@ -503,16 +574,27 @@ impl App {
         if self.history_selected + 1 < self.history.len() {
             return;
         }
-        let Some(name) = self.selected_pipeline.clone() else { return };
-        let Some(&after) = self.history_next.get(&name) else { return };
+        let Some(name) = self.selected_pipeline.clone() else {
+            return;
+        };
+        let Some(&after) = self.history_next.get(&name) else {
+            return;
+        };
         let issued_last_counter = self.history.last().map(|i| i.counter).unwrap_or(0);
         self.history_more_inflight = Some((name.clone(), after));
         self.status_line = format!("\u{2026}loading more runs of {name}");
         let client = self.client.clone();
         let tx = self.tx.clone();
         thread::spawn(move || {
-            let result = client.fetch_history_page(&name, Some(after)).map_err(|e| format!("{e:#}"));
-            let _ = tx.send(ApiEvent::HistoryMore { name, after, issued_last_counter, result });
+            let result = client
+                .fetch_history_page(&name, Some(after))
+                .map_err(|e| format!("{e:#}"));
+            let _ = tx.send(ApiEvent::HistoryMore {
+                name,
+                after,
+                issued_last_counter,
+                result,
+            });
         });
     }
 
@@ -523,9 +605,15 @@ impl App {
             let tx = self.tx.clone();
             let pipeline = pipeline_name.clone();
             let key = git_ref.key();
-            let (owner, repo, branch) = (git_ref.owner.clone(), git_ref.repo.clone(), git_ref.branch.clone());
+            let (owner, repo, branch) = (
+                git_ref.owner.clone(),
+                git_ref.repo.clone(),
+                git_ref.branch.clone(),
+            );
             thread::spawn(move || {
-                let result = github.latest_commit(&owner, &repo, &branch).map_err(|e| format!("{e:#}"));
+                let result = github
+                    .latest_commit(&owner, &repo, &branch)
+                    .map_err(|e| format!("{e:#}"));
                 let _ = tx.send(ApiEvent::GithubLatest(pipeline, key, result));
             });
         }
@@ -534,13 +622,21 @@ impl App {
     /// Resets the per-material checks for the open pipeline's latest run and
     /// kicks off one background check per material.
     fn start_github_checks(&mut self, pipeline: String) {
-        let refs = self.history.first().map(|i| i.git_refs()).unwrap_or_default();
+        let refs = self
+            .history
+            .first()
+            .map(|i| i.git_refs())
+            .unwrap_or_default();
         if refs.is_empty() {
             self.github_checks.clear();
             self.github_state = GithubState::Idle;
             return;
         }
-        self.github_checks = refs.iter().cloned().map(|r| (r, GithubState::Checking)).collect();
+        self.github_checks = refs
+            .iter()
+            .cloned()
+            .map(|r| (r, GithubState::Checking))
+            .collect();
         self.github_state = GithubState::Checking;
         self.spawn_check_github(pipeline, &refs);
     }
@@ -572,25 +668,47 @@ impl App {
         let tx = self.tx.clone();
         thread::spawn(move || {
             let result = match &action {
-                PendingAction::Trigger(name) => client.trigger_pipeline(name).map(|_| format!("Triggered {name}")),
+                PendingAction::Trigger(name) => client
+                    .trigger_pipeline(name)
+                    .map(|_| format!("Triggered {name}")),
                 PendingAction::TriggerWithVars { pipeline, vars } => client
                     .trigger_pipeline_with_vars(pipeline, vars)
                     .map(|_| format!("Triggered {pipeline} with {} variable(s)", vars.len())),
                 PendingAction::Pause(name) => client
                     .pause_pipeline(name, "paused via lazygocd")
                     .map(|_| format!("Paused {name}")),
-                PendingAction::Unpause(name) => client.unpause_pipeline(name).map(|_| format!("Unpaused {name}")),
-                PendingAction::CancelStage { pipeline, pipeline_counter, stage, stage_counter } => client
+                PendingAction::Unpause(name) => client
+                    .unpause_pipeline(name)
+                    .map(|_| format!("Unpaused {name}")),
+                PendingAction::CancelStage {
+                    pipeline,
+                    pipeline_counter,
+                    stage,
+                    stage_counter,
+                } => client
                     .cancel_stage(pipeline, *pipeline_counter, stage, stage_counter)
                     .map(|_| format!("Cancelled {stage} on {pipeline}")),
-                PendingAction::RerunFailedJobs { pipeline, pipeline_counter, stage, stage_counter } => client
+                PendingAction::RerunFailedJobs {
+                    pipeline,
+                    pipeline_counter,
+                    stage,
+                    stage_counter,
+                } => client
                     .rerun_failed_jobs(pipeline, *pipeline_counter, stage, stage_counter)
                     .map(|_| format!("Rerunning failed jobs of {stage} on {pipeline}")),
-                PendingAction::RerunStage { pipeline, pipeline_counter, stage, stage_counter } => client
+                PendingAction::RerunStage {
+                    pipeline,
+                    pipeline_counter,
+                    stage,
+                    stage_counter,
+                } => client
                     .rerun_stage(pipeline, *pipeline_counter, stage, stage_counter)
                     .map(|_| format!("Rerunning stage {stage} on {pipeline}")),
             };
-            let _ = tx.send(ApiEvent::ActionDone(action, result.map_err(|e| format!("{e:#}"))));
+            let _ = tx.send(ApiEvent::ActionDone(
+                action,
+                result.map_err(|e| format!("{e:#}")),
+            ));
         });
     }
 
@@ -609,7 +727,8 @@ impl App {
                 if generation == self.server_gen {
                     match result {
                         Ok(name) => {
-                            self.status_line = format!("Saved view '{name}' (visible in the GoCD web UI too)");
+                            self.status_line =
+                                format!("Saved view '{name}' (visible in the GoCD web UI too)");
                             self.spawn_load_views();
                         }
                         Err(e) => self.error_line = Some(format!("Saving view failed: {e}")),
@@ -630,7 +749,11 @@ impl App {
                     self.spawn_load_views();
                 }
                 self.dashboard_etag = etag;
-                self.status_line = format!("Loaded {} group(s), {} pipeline(s)", groups.len(), pipelines.len());
+                self.status_line = format!(
+                    "Loaded {} group(s), {} pipeline(s)",
+                    groups.len(),
+                    pipelines.len()
+                );
                 // A successful load means connectivity is back: drop any stale network
                 // error banner instead of leaving it until the next keypress.
                 self.error_line = None;
@@ -692,10 +815,18 @@ impl App {
                 // hover-prefetch of something merely pointed at is not news.
                 if self.selected_pipeline.as_deref() == Some(name.as_str()) {
                     self.history_loading = false;
-                    self.error_line = Some(format!("Failed to load history for {name}: {e}{}", auth_hint(&e)));
+                    self.error_line = Some(format!(
+                        "Failed to load history for {name}: {e}{}",
+                        auth_hint(&e)
+                    ));
                 }
             }
-            ApiEvent::HistoryMore { name, after, issued_last_counter, result } => {
+            ApiEvent::HistoryMore {
+                name,
+                after,
+                issued_last_counter,
+                result,
+            } => {
                 // Only the fetch we actually issued may land; anything else is stale.
                 if self.history_more_inflight.as_ref() != Some(&(name.clone(), after)) {
                     return;
@@ -705,7 +836,11 @@ impl App {
                     Ok((instances, next)) => {
                         // If a full refresh landed meanwhile, the cache's tail moved and
                         // appending would duplicate/interleave rows - drop the page.
-                        let tail_counter = self.history_cache.get(&name).and_then(|v| v.last()).map(|i| i.counter);
+                        let tail_counter = self
+                            .history_cache
+                            .get(&name)
+                            .and_then(|v| v.last())
+                            .map(|i| i.counter);
                         if tail_counter != Some(issued_last_counter) {
                             return;
                         }
@@ -723,12 +858,18 @@ impl App {
                         }
                         if self.selected_pipeline.as_deref() == Some(name.as_str()) {
                             self.history.extend(instances);
-                            self.status_line = format!("Loaded {count} more run(s) ({} total)", self.history.len());
+                            self.status_line = format!(
+                                "Loaded {count} more run(s) ({} total)",
+                                self.history.len()
+                            );
                         }
                     }
                     Err(e) => {
                         if self.selected_pipeline.as_deref() == Some(name.as_str()) {
-                            self.error_line = Some(format!("Failed to load more history for {name}: {e}{}", auth_hint(&e)));
+                            self.error_line = Some(format!(
+                                "Failed to load more history for {name}: {e}{}",
+                                auth_hint(&e)
+                            ));
                         }
                     }
                 }
@@ -736,7 +877,8 @@ impl App {
             ApiEvent::ActionDone(action, Ok(msg)) => {
                 self.status_line = msg;
                 match &action {
-                    PendingAction::Trigger(name) | PendingAction::TriggerWithVars { pipeline: name, .. } => {
+                    PendingAction::Trigger(name)
+                    | PendingAction::TriggerWithVars { pipeline: name, .. } => {
                         if self.selected_pipeline.as_deref() == Some(name.as_str()) {
                             self.spawn_load_history(name.clone());
                         }
@@ -761,7 +903,11 @@ impl App {
                 }
             }
             ApiEvent::ActionDone(action, Err(e)) => {
-                self.error_line = Some(format!("Action on {} failed: {e}{}", action.name(), auth_hint(&e)));
+                self.error_line = Some(format!(
+                    "Action on {} failed: {e}{}",
+                    action.name(),
+                    auth_hint(&e)
+                ));
             }
             ApiEvent::GithubLatest(name, key, result) => {
                 if self.selected_pipeline.as_deref() == Some(name.as_str()) {
@@ -769,10 +915,15 @@ impl App {
                         Ok(sha) => GithubState::Found(sha),
                         Err(e) => GithubState::Failed(e),
                     };
-                    if self.github_checks.first().is_some_and(|(r, _)| r.key() == key) {
+                    if self
+                        .github_checks
+                        .first()
+                        .is_some_and(|(r, _)| r.key() == key)
+                    {
                         self.github_state = state.clone();
                     }
-                    if let Some(entry) = self.github_checks.iter_mut().find(|(r, _)| r.key() == key) {
+                    if let Some(entry) = self.github_checks.iter_mut().find(|(r, _)| r.key() == key)
+                    {
                         entry.1 = state;
                     }
                 }
@@ -868,7 +1019,8 @@ impl App {
             KeyCode::Char('y') => self.copy_selected(),
             KeyCode::Char('V') => {
                 if self.filter.is_empty() {
-                    self.status_line = "Filter first (/), then V saves the matches as a GoCD view".to_string();
+                    self.status_line =
+                        "Filter first (/), then V saves the matches as a GoCD view".to_string();
                 } else {
                     let pipelines: Vec<String> = self
                         .groups
@@ -880,19 +1032,29 @@ impl App {
                     if pipelines.is_empty() {
                         self.status_line = "No pipelines match the current filter".to_string();
                     } else {
-                        self.modal = Some(Modal::SaveView { input: String::new(), pipelines });
+                        self.modal = Some(Modal::SaveView {
+                            input: String::new(),
+                            pipelines,
+                        });
                     }
                 }
             }
             KeyCode::Char('v') => {
                 if self.views.is_empty() {
-                    self.status_line = "No personalized views on this server (create them in the GoCD dashboard)".to_string();
+                    self.status_line =
+                        "No personalized views on this server (create them in the GoCD dashboard)"
+                            .to_string();
                 } else {
-                    self.modal = Some(Modal::ViewPicker { selected: self.active_view.map_or(0, |i| i + 1) });
+                    self.modal = Some(Modal::ViewPicker {
+                        selected: self.active_view.map_or(0, |i| i + 1),
+                    });
                 }
             }
             KeyCode::Char('A') => {
-                self.modal = Some(Modal::Reauth(ReauthForm::new(ReauthMode::Reconnect, &self.server_url)))
+                self.modal = Some(Modal::Reauth(ReauthForm::new(
+                    ReauthMode::Reconnect,
+                    &self.server_url,
+                )))
             }
             KeyCode::Char('@') => {
                 let current = self.cfg.github_token.clone().unwrap_or_default();
@@ -941,14 +1103,22 @@ impl App {
                     self.modal = None;
                     let label = match &action {
                         PendingAction::Trigger(n) => format!("Triggering {n}..."),
-                        PendingAction::TriggerWithVars { pipeline, .. } => format!("Triggering {pipeline}..."),
+                        PendingAction::TriggerWithVars { pipeline, .. } => {
+                            format!("Triggering {pipeline}...")
+                        }
                         PendingAction::Pause(n) => format!("Pausing {n}..."),
                         PendingAction::Unpause(n) => format!("Unpausing {n}..."),
-                        PendingAction::CancelStage { pipeline, stage, .. } => format!("Cancelling {stage} on {pipeline}..."),
-                        PendingAction::RerunFailedJobs { pipeline, stage, .. } => {
+                        PendingAction::CancelStage {
+                            pipeline, stage, ..
+                        } => format!("Cancelling {stage} on {pipeline}..."),
+                        PendingAction::RerunFailedJobs {
+                            pipeline, stage, ..
+                        } => {
                             format!("Rerunning failed jobs of {stage} on {pipeline}...")
                         }
-                        PendingAction::RerunStage { pipeline, stage, .. } => {
+                        PendingAction::RerunStage {
+                            pipeline, stage, ..
+                        } => {
                             format!("Rerunning stage {stage} on {pipeline}...")
                         }
                     };
@@ -957,10 +1127,21 @@ impl App {
                 }
                 // Escalate a failed-jobs rerun to the whole stage.
                 KeyCode::Char('a') => {
-                    if let PendingAction::RerunFailedJobs { pipeline, pipeline_counter, stage, stage_counter } = action {
+                    if let PendingAction::RerunFailedJobs {
+                        pipeline,
+                        pipeline_counter,
+                        stage,
+                        stage_counter,
+                    } = action
+                    {
                         self.modal = None;
                         self.status_line = format!("Rerunning stage {stage} on {pipeline}...");
-                        self.spawn_action(PendingAction::RerunStage { pipeline, pipeline_counter, stage, stage_counter });
+                        self.spawn_action(PendingAction::RerunStage {
+                            pipeline,
+                            pipeline_counter,
+                            stage,
+                            stage_counter,
+                        });
                     }
                 }
                 KeyCode::Char('n') | KeyCode::Esc => {
@@ -972,7 +1153,9 @@ impl App {
             Modal::GithubConnect { input } => self.handle_github_connect_key(key, input),
             Modal::TriggerVars(form) => self.handle_trigger_vars_key(key, form),
             Modal::ViewPicker { selected } => self.handle_view_picker_key(key, selected),
-            Modal::SaveView { input, pipelines } => self.handle_save_view_key(key, input, pipelines),
+            Modal::SaveView { input, pipelines } => {
+                self.handle_save_view_key(key, input, pipelines)
+            }
             Modal::ConsoleLog(state) => self.handle_console_log_key(key, *state),
         }
     }
@@ -987,7 +1170,10 @@ impl App {
                 KeyCode::Char('y') | KeyCode::Enter => {
                     self.modal = None;
                     self.status_line = format!("Triggering {}...", form.pipeline);
-                    self.spawn_action(PendingAction::TriggerWithVars { pipeline: form.pipeline, vars: form.vars });
+                    self.spawn_action(PendingAction::TriggerWithVars {
+                        pipeline: form.pipeline,
+                        vars: form.vars,
+                    });
                     return;
                 }
                 KeyCode::Char('n') => {
@@ -1121,19 +1307,27 @@ impl App {
                 self.jump_to_match(&mut state);
             }
             KeyCode::Up | KeyCode::Char('k') => match state.tab {
-                JobTab::Artifacts => state.artifact_selected = state.artifact_selected.saturating_sub(1),
+                JobTab::Artifacts => {
+                    state.artifact_selected = state.artifact_selected.saturating_sub(1)
+                }
                 _ => console_scroll_up(&mut state, self.console_view_height, 1),
             },
             KeyCode::Down | KeyCode::Char('j') => match state.tab {
                 JobTab::Artifacts => {
-                    let max = state.artifacts.as_ref().map_or(0, |a| a.len().saturating_sub(1));
+                    let max = state
+                        .artifacts
+                        .as_ref()
+                        .map_or(0, |a| a.len().saturating_sub(1));
                     state.artifact_selected = (state.artifact_selected + 1).min(max);
                 }
                 _ => state.scroll = state.scroll.saturating_add(1),
             },
             KeyCode::Char('y') if state.tab == JobTab::Artifacts => {
-                if let Some((_, name, _, Some(url))) =
-                    state.artifacts.as_ref().and_then(|a| a.get(state.artifact_selected)).cloned()
+                if let Some((_, name, _, Some(url))) = state
+                    .artifacts
+                    .as_ref()
+                    .and_then(|a| a.get(state.artifact_selected))
+                    .cloned()
                 {
                     match copy_to_clipboard(&url) {
                         Ok(()) => self.status_line = format!("Copied url for {name}"),
@@ -1142,8 +1336,11 @@ impl App {
                 }
             }
             KeyCode::Enter | KeyCode::Char('o') if state.tab == JobTab::Artifacts => {
-                if let Some((_, name, folder, Some(url))) =
-                    state.artifacts.as_ref().and_then(|a| a.get(state.artifact_selected)).cloned()
+                if let Some((_, name, folder, Some(url))) = state
+                    .artifacts
+                    .as_ref()
+                    .and_then(|a| a.get(state.artifact_selected))
+                    .cloned()
                     && !folder
                 {
                     match open_url(&url) {
@@ -1191,7 +1388,13 @@ impl App {
             let j = state.job_ref.clone();
             thread::spawn(move || {
                 let result = client
-                    .fetch_artifacts(&j.pipeline, j.pipeline_counter, &j.stage, &j.stage_counter, &j.job)
+                    .fetch_artifacts(
+                        &j.pipeline,
+                        j.pipeline_counter,
+                        &j.stage,
+                        &j.stage_counter,
+                        &j.job,
+                    )
                     .map_err(|e| format!("{e:#}"));
                 let _ = tx.send(ApiEvent::Artifacts(j, result));
             });
@@ -1206,14 +1409,22 @@ impl App {
 
         if form.step.is_choice() {
             match key.code {
-                KeyCode::Up | KeyCode::Down | KeyCode::Char('j') | KeyCode::Char('k') | KeyCode::Tab => {
+                KeyCode::Up
+                | KeyCode::Down
+                | KeyCode::Char('j')
+                | KeyCode::Char('k')
+                | KeyCode::Tab => {
                     form.choice_index = 1 - form.choice_index;
                 }
                 KeyCode::Enter => match form.step {
                     ReauthStep::ChooseAuthMethod => {
                         form.use_token = form.choice_index == 1;
                         form.choice_index = 0;
-                        form.step = if form.use_token { ReauthStep::Secret } else { ReauthStep::Username };
+                        form.step = if form.use_token {
+                            ReauthStep::Secret
+                        } else {
+                            ReauthStep::Username
+                        };
                     }
                     ReauthStep::Insecure => {
                         form.insecure = form.choice_index == 1;
@@ -1249,7 +1460,11 @@ impl App {
                     form.username = form.input.trim().to_string();
                     form.input.clear();
                     form.choice_index = 0;
-                    form.step = if form.username.is_empty() { ReauthStep::Insecure } else { ReauthStep::Secret };
+                    form.step = if form.username.is_empty() {
+                        ReauthStep::Insecure
+                    } else {
+                        ReauthStep::Secret
+                    };
                 }
                 ReauthStep::Secret => {
                     form.secret = form.input.clone();
@@ -1344,14 +1559,16 @@ impl App {
                     Ok(client) => {
                         self.github = client;
                         self.status_line = if token.is_empty() {
-                            "GitHub disconnected (checks now unauthenticated, public repos only)".to_string()
+                            "GitHub disconnected (checks now unauthenticated, public repos only)"
+                                .to_string()
                         } else {
                             "GitHub connected".to_string()
                         };
                         if let Ok(path) = crate::config::config_path()
                             && let Err(e) = crate::config::save(&path, &self.cfg)
                         {
-                            self.error_line = Some(format!("Connected, but failed to save config: {e}"));
+                            self.error_line =
+                                Some(format!("Connected, but failed to save config: {e}"));
                         }
                         // Retry the current pipeline's checks, if any, against the new token.
                         if let Some(name) = self.selected_pipeline.clone()
@@ -1404,9 +1621,14 @@ impl App {
 
     fn update_hover_target(&mut self) {
         let name = match self.rows.get(self.selected) {
-            Some(Row::Pipeline { group_idx, pipeline_idx }) => {
-                self.groups.get(*group_idx).and_then(|g| g.pipelines.get(*pipeline_idx)).cloned()
-            }
+            Some(Row::Pipeline {
+                group_idx,
+                pipeline_idx,
+            }) => self
+                .groups
+                .get(*group_idx)
+                .and_then(|g| g.pipelines.get(*pipeline_idx))
+                .cloned(),
             Some(Row::FavoritePipeline(name)) => Some(name.clone()),
             _ => None,
         };
@@ -1424,7 +1646,9 @@ impl App {
     /// Called every main-loop tick: if the cursor has sat on the same pipeline
     /// row past the debounce delay, start loading its history in the background.
     pub fn maybe_prefetch(&mut self) {
-        let Some((name, since)) = &self.hover_target else { return };
+        let Some((name, since)) = &self.hover_target else {
+            return;
+        };
         if since.elapsed() < HOVER_PREFETCH_DELAY {
             return;
         }
@@ -1456,7 +1680,9 @@ impl App {
     /// stage is still running, silently re-fetch every few seconds - stops on
     /// its own once the stage completes, so it doesn't poll a finished log forever.
     pub fn maybe_poll_console(&mut self) {
-        let Some(Modal::ConsoleLog(state)) = &self.modal else { return };
+        let Some(Modal::ConsoleLog(state)) = &self.modal else {
+            return;
+        };
         if state.loading {
             return;
         }
@@ -1485,7 +1711,10 @@ impl App {
     pub fn needs_animation(&self) -> bool {
         self.loading_groups
             || self.history_loading
-            || self.github_checks.iter().any(|(_, s)| matches!(s, GithubState::Checking))
+            || self
+                .github_checks
+                .iter()
+                .any(|(_, s)| matches!(s, GithubState::Checking))
             || matches!(&self.modal, Some(Modal::ConsoleLog(s)) if s.loading || s.artifacts_loading)
     }
 
@@ -1514,7 +1743,9 @@ impl App {
         if self.modal.is_some() {
             return false;
         }
-        let Some(pane) = self.pane_at(x, y) else { return false };
+        let Some(pane) = self.pane_at(x, y) else {
+            return false;
+        };
         self.move_selection_in(pane, delta);
         true
     }
@@ -1523,7 +1754,9 @@ impl App {
         if self.modal.is_some() {
             return false;
         }
-        let Some(pane) = self.pane_at(x, y) else { return false };
+        let Some(pane) = self.pane_at(x, y) else {
+            return false;
+        };
         // A click while filtering commits the filter, like Enter, then selects.
         self.filter_active = false;
         let focus_changed = self.focus != pane;
@@ -1533,7 +1766,9 @@ impl App {
                 self.rebuild_detail_rows();
             }
         }
-        let Some(idx) = self.row_at(pane, y) else { return true };
+        let Some(idx) = self.row_at(pane, y) else {
+            return true;
+        };
         match pane {
             Focus::Groups => {
                 if !focus_changed && self.selected == idx {
@@ -1572,10 +1807,18 @@ impl App {
     /// history table's header row) plus the widget's current scroll offset.
     fn row_at(&self, pane: Focus, y: u16) -> Option<usize> {
         let (area, first_y, offset, len) = match pane {
-            Focus::Groups => (self.tree_area, self.tree_area.y + 1, self.tree_state.offset(), self.rows.len()),
-            Focus::History => {
-                (self.history_area, self.history_area.y + 2, self.history_state.offset(), self.history.len())
-            }
+            Focus::Groups => (
+                self.tree_area,
+                self.tree_area.y + 1,
+                self.tree_state.offset(),
+                self.rows.len(),
+            ),
+            Focus::History => (
+                self.history_area,
+                self.history_area.y + 2,
+                self.history_state.offset(),
+                self.history.len(),
+            ),
             Focus::Detail => return None,
         };
         let last_y = area.y + area.height.saturating_sub(1);
@@ -1622,8 +1865,12 @@ impl App {
             self.status_line = "Open a pipeline first (enter) to rerun a failed stage".to_string();
             return;
         }
-        let Some(pipeline) = self.selected_pipeline.clone() else { return };
-        let Some(inst) = self.history.get(self.history_selected) else { return };
+        let Some(pipeline) = self.selected_pipeline.clone() else {
+            return;
+        };
+        let Some(inst) = self.history.get(self.history_selected) else {
+            return;
+        };
         if inst.overall_status() == "Passed" {
             self.status_line = format!("Run #{} passed - nothing failed to rerun", inst.counter);
             return;
@@ -1663,7 +1910,11 @@ impl App {
 
     fn request_pause_toggle(&mut self) {
         if let Some(name) = self.current_row_pipeline_name() {
-            let paused = self.pipeline_info.get(&name).map(|p| p.pause_info.paused).unwrap_or(false);
+            let paused = self
+                .pipeline_info
+                .get(&name)
+                .map(|p| p.pause_info.paused)
+                .unwrap_or(false);
             let action = if paused {
                 PendingAction::Unpause(name.clone())
             } else {
@@ -1682,10 +1933,13 @@ impl App {
     /// affects future scheduling and can't touch a build already running.
     fn request_cancel(&mut self) {
         let Some(pipeline) = self.selected_pipeline.clone() else {
-            self.status_line = "Open a pipeline first (enter) to cancel a running build".to_string();
+            self.status_line =
+                "Open a pipeline first (enter) to cancel a running build".to_string();
             return;
         };
-        let Some(inst) = self.history.first() else { return };
+        let Some(inst) = self.history.first() else {
+            return;
+        };
         let Some(stage) = inst.stages.iter().find(|s| s.is_active()) else {
             self.status_line = format!("Nothing currently running in {pipeline}");
             return;
@@ -1695,14 +1949,20 @@ impl App {
             return;
         };
         let stage_name = stage.name.clone();
-        let action =
-            PendingAction::CancelStage { pipeline: pipeline.clone(), pipeline_counter: inst.counter, stage: stage_name.clone(), stage_counter };
+        let action = PendingAction::CancelStage {
+            pipeline: pipeline.clone(),
+            pipeline_counter: inst.counter,
+            stage: stage_name.clone(),
+            stage_counter,
+        };
         let message = format!("Cancel the running '{stage_name}' stage of '{pipeline}'?");
         self.modal = Some(Modal::Confirm { action, message });
     }
 
     fn toggle_favorite(&mut self) {
-        let Some(name) = self.current_row_pipeline_name() else { return };
+        let Some(name) = self.current_row_pipeline_name() else {
+            return;
+        };
         if self.favorites.remove(&name) {
             self.status_line = format!("Removed {name} from favorites");
         } else {
@@ -1719,22 +1979,33 @@ impl App {
     fn copy_selected(&mut self) {
         let (what, text) = match self.focus {
             Focus::History | Focus::Detail => {
-                let Some(inst) = self.history.get(self.history_selected) else { return };
+                let Some(inst) = self.history.get(self.history_selected) else {
+                    return;
+                };
                 match inst.git_modification().and_then(|m| m.revision.clone()) {
                     Some(sha) => ("commit sha", sha),
                     None => ("run label", inst.label.clone()),
                 }
             }
             Focus::Groups => match self.rows.get(self.selected) {
-                Some(Row::Pipeline { group_idx, pipeline_idx }) => {
-                    let Some(name) = self.groups.get(*group_idx).and_then(|g| g.pipelines.get(*pipeline_idx)) else {
+                Some(Row::Pipeline {
+                    group_idx,
+                    pipeline_idx,
+                }) => {
+                    let Some(name) = self
+                        .groups
+                        .get(*group_idx)
+                        .and_then(|g| g.pipelines.get(*pipeline_idx))
+                    else {
                         return;
                     };
                     ("pipeline name", name.clone())
                 }
                 Some(Row::FavoritePipeline(name)) => ("pipeline name", name.clone()),
                 Some(Row::Group { idx }) => {
-                    let Some(g) = self.groups.get(*idx) else { return };
+                    let Some(g) = self.groups.get(*idx) else {
+                        return;
+                    };
                     ("group name", g.name.clone())
                 }
                 _ => return,
@@ -1786,9 +2057,15 @@ impl App {
     pub fn current_row_pipeline_name(&self) -> Option<String> {
         match self.focus {
             Focus::Groups => match self.rows.get(self.selected)? {
-                Row::Pipeline { group_idx, pipeline_idx } => {
-                    self.groups.get(*group_idx)?.pipelines.get(*pipeline_idx).cloned()
-                }
+                Row::Pipeline {
+                    group_idx,
+                    pipeline_idx,
+                } => self
+                    .groups
+                    .get(*group_idx)?
+                    .pipelines
+                    .get(*pipeline_idx)
+                    .cloned(),
                 Row::FavoritePipeline(name) => Some(name.clone()),
                 Row::Group { .. } | Row::FavoritesHeader => None,
             },
@@ -1871,8 +2148,15 @@ impl App {
                         self.rebuild_rows();
                     }
                 }
-                Some(Row::Pipeline { group_idx, pipeline_idx }) => {
-                    if let Some(name) = self.groups.get(group_idx).and_then(|g| g.pipelines.get(pipeline_idx)).cloned()
+                Some(Row::Pipeline {
+                    group_idx,
+                    pipeline_idx,
+                }) => {
+                    if let Some(name) = self
+                        .groups
+                        .get(group_idx)
+                        .and_then(|g| g.pipelines.get(pipeline_idx))
+                        .cloned()
                     {
                         self.open_pipeline(name);
                     }
@@ -1888,7 +2172,9 @@ impl App {
             },
             Focus::History => {}
             Focus::Detail => {
-                if let Some(DetailRow::Job(si, ji)) = self.detail_rows.get(self.detail_selected).copied() {
+                if let Some(DetailRow::Job(si, ji)) =
+                    self.detail_rows.get(self.detail_selected).copied()
+                {
                     self.open_console_log_for(si, ji);
                 }
             }
@@ -1918,16 +2204,30 @@ impl App {
     }
 
     fn open_console_log_for(&mut self, stage_idx: usize, job_idx: usize) {
-        let Some(pipeline) = self.selected_pipeline.clone() else { return };
-        let Some(inst) = self.history.get(self.history_selected) else { return };
-        let Some(stage) = inst.stages.get(stage_idx) else { return };
-        let Some(job) = stage.jobs.get(job_idx) else { return };
-        let Some(stage_counter) = stage.counter.clone() else {
-            self.error_line = Some("Stage counter unavailable, can't fetch console log".to_string());
+        let Some(pipeline) = self.selected_pipeline.clone() else {
             return;
         };
-        let job_ref =
-            JobRef { pipeline, pipeline_counter: inst.counter, stage: stage.name.clone(), stage_counter, job: job.name.clone() };
+        let Some(inst) = self.history.get(self.history_selected) else {
+            return;
+        };
+        let Some(stage) = inst.stages.get(stage_idx) else {
+            return;
+        };
+        let Some(job) = stage.jobs.get(job_idx) else {
+            return;
+        };
+        let Some(stage_counter) = stage.counter.clone() else {
+            self.error_line =
+                Some("Stage counter unavailable, can't fetch console log".to_string());
+            return;
+        };
+        let job_ref = JobRef {
+            pipeline,
+            pipeline_counter: inst.counter,
+            stage: stage.name.clone(),
+            stage_counter,
+            job: job.name.clone(),
+        };
         let mut materials = Vec::new();
         if let Some(cause) = &inst.build_cause {
             if let Some(msg) = &cause.trigger_message {
@@ -1952,7 +2252,10 @@ impl App {
             }
         }
         self.modal = Some(Modal::ConsoleLog(Box::new(ConsoleLogState {
-            title: format!("{}/{} - {}", job_ref.stage, job_ref.stage_counter, job_ref.job),
+            title: format!(
+                "{}/{} - {}",
+                job_ref.stage, job_ref.stage_counter, job_ref.job
+            ),
             job_ref: job_ref.clone(),
             result: job.result.clone().or_else(|| job.state.clone()),
             tab: JobTab::Console,
@@ -1990,7 +2293,11 @@ impl App {
                     let name = g.name.clone();
                     self.expanded.remove(&name);
                     self.rebuild_rows();
-                    if let Some(pos) = self.rows.iter().position(|r| matches!(r, Row::Group{idx} if *idx == group_idx)) {
+                    if let Some(pos) = self
+                        .rows
+                        .iter()
+                        .position(|r| matches!(r, Row::Group{idx} if *idx == group_idx))
+                    {
                         self.selected = pos;
                     }
                 }
@@ -1998,7 +2305,11 @@ impl App {
             Some(Row::FavoritePipeline(_)) => {
                 self.favorites_expanded = false;
                 self.rebuild_rows();
-                if let Some(pos) = self.rows.iter().position(|r| matches!(r, Row::FavoritesHeader)) {
+                if let Some(pos) = self
+                    .rows
+                    .iter()
+                    .position(|r| matches!(r, Row::FavoritesHeader))
+                {
                     self.selected = pos;
                 }
             }
@@ -2013,9 +2324,16 @@ impl App {
             Row::FavoritesHeader => Some(SelectionKey::FavoritesHeader),
             Row::FavoritePipeline(name) => Some(SelectionKey::Favorite(name.clone())),
             Row::Group { idx } => Some(SelectionKey::Group(self.groups.get(*idx)?.name.clone())),
-            Row::Pipeline { group_idx, pipeline_idx } => {
-                Some(SelectionKey::Pipeline(self.groups.get(*group_idx)?.pipelines.get(*pipeline_idx)?.clone()))
-            }
+            Row::Pipeline {
+                group_idx,
+                pipeline_idx,
+            } => Some(SelectionKey::Pipeline(
+                self.groups
+                    .get(*group_idx)?
+                    .pipelines
+                    .get(*pipeline_idx)?
+                    .clone(),
+            )),
         }
     }
 
@@ -2027,7 +2345,13 @@ impl App {
             (Row::Group { idx }, SelectionKey::Group(k)) => {
                 self.groups.get(*idx).is_some_and(|g| g.name == *k)
             }
-            (Row::Pipeline { group_idx, pipeline_idx }, SelectionKey::Pipeline(k)) => self
+            (
+                Row::Pipeline {
+                    group_idx,
+                    pipeline_idx,
+                },
+                SelectionKey::Pipeline(k),
+            ) => self
                 .groups
                 .get(*group_idx)
                 .and_then(|g| g.pipelines.get(*pipeline_idx))
@@ -2055,7 +2379,8 @@ impl App {
                     return;
                 }
                 self.modal = None;
-                self.status_line = format!("Saving view '{name}' ({} pipelines)...", pipelines.len());
+                self.status_line =
+                    format!("Saving view '{name}' ({} pipelines)...", pipelines.len());
                 let client = self.client.clone();
                 let tx = self.tx.clone();
                 let generation = self.server_gen;
@@ -2132,10 +2457,17 @@ impl App {
             }
 
             self.rows.push(Row::Group { idx: gi });
-            let expanded = if filter.is_empty() { self.expanded.contains(&group.name) } else { true };
+            let expanded = if filter.is_empty() {
+                self.expanded.contains(&group.name)
+            } else {
+                true
+            };
             if expanded {
                 for pi in matching {
-                    self.rows.push(Row::Pipeline { group_idx: gi, pipeline_idx: pi });
+                    self.rows.push(Row::Pipeline {
+                        group_idx: gi,
+                        pipeline_idx: pi,
+                    });
                 }
             }
         }
@@ -2161,7 +2493,10 @@ fn console_scroll_up(state: &mut ConsoleLogState, view_height: u16, lines: usize
 /// polls do this): keep the older tail when the fresh page overlaps it, so
 /// pagination the user scrolled into survives refreshes. Returns the merged
 /// list and whether the previously-stored next-page cursor still applies.
-fn merge_history_pages(fresh: Vec<PipelineInstance>, cached: Vec<PipelineInstance>) -> (Vec<PipelineInstance>, bool) {
+fn merge_history_pages(
+    fresh: Vec<PipelineInstance>,
+    cached: Vec<PipelineInstance>,
+) -> (Vec<PipelineInstance>, bool) {
     let (Some(fresh_last), Some(cached_first)) = (fresh.last(), cached.first()) else {
         return (fresh, false);
     };
@@ -2196,7 +2531,9 @@ fn new_failures(
         .iter()
         .filter(|name| {
             new.get(*name).map(|p| p.latest_status()) == Some("Failed")
-                && old.get(*name).is_some_and(|p| p.latest_status() != "Failed")
+                && old
+                    .get(*name)
+                    .is_some_and(|p| p.latest_status() != "Failed")
         })
         .cloned()
         .collect();
@@ -2211,7 +2548,11 @@ pub fn fuzzy_match(haystack: &str, needle: &str) -> Option<Vec<usize>> {
     needle
         .chars()
         .filter(|c| *c != ' ')
-        .map(|nc| hay.by_ref().find(|(_, hc)| hc.eq_ignore_ascii_case(&nc)).map(|(i, _)| i))
+        .map(|nc| {
+            hay.by_ref()
+                .find(|(_, hc)| hc.eq_ignore_ascii_case(&nc))
+                .map(|(i, _)| i)
+        })
         .collect()
 }
 
@@ -2227,12 +2568,24 @@ fn base64(data: &[u8]) -> String {
     const TBL: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
     for chunk in data.chunks(3) {
-        let b = [chunk[0], *chunk.get(1).unwrap_or(&0), *chunk.get(2).unwrap_or(&0)];
+        let b = [
+            chunk[0],
+            *chunk.get(1).unwrap_or(&0),
+            *chunk.get(2).unwrap_or(&0),
+        ];
         let n = (u32::from(b[0]) << 16) | (u32::from(b[1]) << 8) | u32::from(b[2]);
         out.push(TBL[(n >> 18) as usize & 63] as char);
         out.push(TBL[(n >> 12) as usize & 63] as char);
-        out.push(if chunk.len() > 1 { TBL[(n >> 6) as usize & 63] as char } else { '=' });
-        out.push(if chunk.len() > 2 { TBL[n as usize & 63] as char } else { '=' });
+        out.push(if chunk.len() > 1 {
+            TBL[(n >> 6) as usize & 63] as char
+        } else {
+            '='
+        });
+        out.push(if chunk.len() > 2 {
+            TBL[n as usize & 63] as char
+        } else {
+            '='
+        });
     }
     out
 }
@@ -2249,11 +2602,19 @@ fn open_url(url: &str) -> std::io::Result<()> {
     };
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     let mut cmd = std::process::Command::new("xdg-open");
-    cmd.arg(url).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).spawn().map(|_| ())
+    cmd.arg(url)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .map(|_| ())
 }
 
 fn auth_hint(e: &str) -> &'static str {
-    if e.contains("401") { "  (press A to reconnect)" } else { "" }
+    if e.contains("401") {
+        "  (press A to reconnect)"
+    } else {
+        ""
+    }
 }
 
 fn format_age(saved_at_ms: i64) -> String {
@@ -2288,8 +2649,14 @@ mod tests {
 
     #[test]
     fn fuzzy_match_subsequence() {
-        assert_eq!(fuzzy_match("deploy-to-production", "dtp"), Some(vec![0, 7, 10]));
-        assert_eq!(fuzzy_match("Deploy-Prod", "dep prod"), Some(vec![0, 1, 2, 7, 8, 9, 10]));
+        assert_eq!(
+            fuzzy_match("deploy-to-production", "dtp"),
+            Some(vec![0, 7, 10])
+        );
+        assert_eq!(
+            fuzzy_match("Deploy-Prod", "dep prod"),
+            Some(vec![0, 1, 2, 7, 8, 9, 10])
+        );
         assert_eq!(fuzzy_match("alpha", "px"), None);
         assert_eq!(fuzzy_match("abc", ""), Some(vec![]));
         // Chars must appear in order, not just anywhere.
@@ -2298,14 +2665,26 @@ mod tests {
 
     #[test]
     fn parse_env_var_forms() {
-        assert_eq!(super::parse_env_var("FOO=bar"), Some(("FOO".into(), "bar".into())));
-        assert_eq!(super::parse_env_var(" FOO =a=b"), Some(("FOO".into(), "a=b".into())));
-        assert_eq!(super::parse_env_var("FOO="), Some(("FOO".into(), String::new())));
+        assert_eq!(
+            super::parse_env_var("FOO=bar"),
+            Some(("FOO".into(), "bar".into()))
+        );
+        assert_eq!(
+            super::parse_env_var(" FOO =a=b"),
+            Some(("FOO".into(), "a=b".into()))
+        );
+        assert_eq!(
+            super::parse_env_var("FOO="),
+            Some(("FOO".into(), String::new()))
+        );
         assert_eq!(super::parse_env_var("=bar"), None);
         assert_eq!(super::parse_env_var("no-equals"), None);
     }
 
-    use crate::model::{DashboardInstance, DashboardInstanceEmbedded, DashboardPipeline, DashboardPipelineEmbedded, DashboardStage, PauseInfo};
+    use crate::model::{
+        DashboardInstance, DashboardInstanceEmbedded, DashboardPipeline, DashboardPipelineEmbedded,
+        DashboardStage, PauseInfo,
+    };
     use std::collections::{HashMap, HashSet};
 
     fn pipeline(name: &str, status: &str) -> DashboardPipeline {
@@ -2321,7 +2700,10 @@ mod tests {
                     counter: 1,
                     triggered_by: None,
                     embedded: DashboardInstanceEmbedded {
-                        stages: vec![DashboardStage { name: "build".into(), status: Some(status.to_string()) }],
+                        stages: vec![DashboardStage {
+                            name: "build".into(),
+                            status: Some(status.to_string()),
+                        }],
                     },
                 }],
             },
@@ -2329,17 +2711,28 @@ mod tests {
     }
 
     fn snapshot(entries: &[(&str, &str)]) -> HashMap<String, DashboardPipeline> {
-        entries.iter().map(|(n, s)| (n.to_string(), pipeline(n, s))).collect()
+        entries
+            .iter()
+            .map(|(n, s)| (n.to_string(), pipeline(n, s)))
+            .collect()
     }
 
     #[test]
     fn new_failures_fires_only_on_favorited_edge_transitions() {
         let favorites: HashSet<String> = ["a", "b", "c"].iter().map(|s| s.to_string()).collect();
         let old = snapshot(&[("a", "Passed"), ("b", "Failed"), ("d", "Passed")]);
-        let new = snapshot(&[("a", "Failed"), ("b", "Failed"), ("c", "Failed"), ("d", "Failed")]);
+        let new = snapshot(&[
+            ("a", "Failed"),
+            ("b", "Failed"),
+            ("c", "Failed"),
+            ("d", "Failed"),
+        ]);
         // a: Passed->Failed and favorited -> fires. b: already Failed -> no.
         // c: unknown before (no observed transition) -> no. d: not favorited -> no.
-        assert_eq!(super::new_failures(&old, &new, &favorites), vec!["a".to_string()]);
+        assert_eq!(
+            super::new_failures(&old, &new, &favorites),
+            vec!["a".to_string()]
+        );
     }
 
     fn run(counter: i64) -> crate::model::PipelineInstance {
@@ -2375,7 +2768,10 @@ mod tests {
         assert_eq!(merged.first().unwrap().counter, 71);
         assert_eq!(merged.len(), 8);
         // Cached no deeper than the fresh page: plain replacement.
-        let (merged, kept) = super::merge_history_pages((54..=61).rev().map(run).collect(), (54..=61).rev().map(run).collect());
+        let (merged, kept) = super::merge_history_pages(
+            (54..=61).rev().map(run).collect(),
+            (54..=61).rev().map(run).collect(),
+        );
         assert!(!kept);
         assert_eq!(merged.len(), 8);
         // Empty cache (first load).
@@ -2390,6 +2786,9 @@ mod tests {
         let red = snapshot(&[("a", "Failed")]);
         let green = snapshot(&[("a", "Passed")]);
         assert!(super::new_failures(&red, &green, &favorites).is_empty());
-        assert_eq!(super::new_failures(&green, &red, &favorites), vec!["a".to_string()]);
+        assert_eq!(
+            super::new_failures(&green, &red, &favorites),
+            vec!["a".to_string()]
+        );
     }
 }

@@ -1,8 +1,11 @@
 use crate::config::Config;
-use crate::model::{ArtifactNode, DashboardEmbedded, DashboardResponse, HistoryResponse, PipelineInstance, ViewFilters};
+use crate::model::{
+    ArtifactNode, DashboardEmbedded, DashboardResponse, HistoryResponse, PipelineInstance,
+    ViewFilters,
+};
 use anyhow::{Context, Result};
-use reqwest::blocking::{Client, RequestBuilder};
 use reqwest::Method;
+use reqwest::blocking::{Client, RequestBuilder};
 
 #[derive(Clone)]
 pub struct GoCdClient {
@@ -118,10 +121,17 @@ impl GoCdClient {
         let status = resp.status();
         let body = resp.text().context("reading history response body")?;
         if !status.is_success() {
-            anyhow::bail!("GoCD returned {status} for {pipeline_name} history: {}", truncate(&body));
+            anyhow::bail!(
+                "GoCD returned {status} for {pipeline_name} history: {}",
+                truncate(&body)
+            );
         }
-        let parsed: HistoryResponse = serde_json::from_str(&body)
-            .with_context(|| format!("parsing history response for {pipeline_name}: {}", truncate(&body)))?;
+        let parsed: HistoryResponse = serde_json::from_str(&body).with_context(|| {
+            format!(
+                "parsing history response for {pipeline_name}: {}",
+                truncate(&body)
+            )
+        })?;
         let next = parsed
             .links
             .and_then(|l| l.next)
@@ -141,13 +151,20 @@ impl GoCdClient {
         let status = resp.status();
         if !status.is_success() {
             let body = resp.text().unwrap_or_default();
-            anyhow::bail!("GoCD returned {status} triggering {pipeline_name}: {}", truncate(&body));
+            anyhow::bail!(
+                "GoCD returned {status} triggering {pipeline_name}: {}",
+                truncate(&body)
+            );
         }
         Ok(())
     }
 
     /// Trigger with one-off environment variable overrides for this run.
-    pub fn trigger_pipeline_with_vars(&self, pipeline_name: &str, vars: &[(String, String)]) -> Result<()> {
+    pub fn trigger_pipeline_with_vars(
+        &self,
+        pipeline_name: &str,
+        vars: &[(String, String)],
+    ) -> Result<()> {
         let env: Vec<serde_json::Value> = vars
             .iter()
             .map(|(name, value)| serde_json::json!({ "name": name, "value": value, "secure": false }))
@@ -165,7 +182,10 @@ impl GoCdClient {
         let status = resp.status();
         if !status.is_success() {
             let body = resp.text().unwrap_or_default();
-            anyhow::bail!("GoCD returned {status} triggering {pipeline_name}: {}", truncate(&body));
+            anyhow::bail!(
+                "GoCD returned {status} triggering {pipeline_name}: {}",
+                truncate(&body)
+            );
         }
         Ok(())
     }
@@ -178,7 +198,13 @@ impl GoCdClient {
         stage_name: &str,
         stage_counter: &str,
     ) -> Result<()> {
-        self.rerun(pipeline_name, pipeline_counter, stage_name, stage_counter, "run-failed-jobs")
+        self.rerun(
+            pipeline_name,
+            pipeline_counter,
+            stage_name,
+            stage_counter,
+            "run-failed-jobs",
+        )
     }
 
     /// Reruns the whole stage instance (all jobs, passed ones included).
@@ -189,7 +215,13 @@ impl GoCdClient {
         stage_name: &str,
         stage_counter: &str,
     ) -> Result<()> {
-        self.rerun(pipeline_name, pipeline_counter, stage_name, stage_counter, "run")
+        self.rerun(
+            pipeline_name,
+            pipeline_counter,
+            stage_name,
+            stage_counter,
+            "run",
+        )
     }
 
     fn rerun(
@@ -200,7 +232,9 @@ impl GoCdClient {
         stage_counter: &str,
         verb: &str,
     ) -> Result<()> {
-        let path = format!("/api/stages/{pipeline_name}/{pipeline_counter}/{stage_name}/{stage_counter}/{verb}");
+        let path = format!(
+            "/api/stages/{pipeline_name}/{pipeline_counter}/{stage_name}/{stage_counter}/{verb}"
+        );
         let resp = self
             .request(Method::POST, &path, 3)
             .header("X-GoCD-Confirm", "true")
@@ -209,7 +243,10 @@ impl GoCdClient {
         let status = resp.status();
         if !status.is_success() {
             let body = resp.text().unwrap_or_default();
-            anyhow::bail!("GoCD returned {status} rerunning stage: {}", truncate(&body));
+            anyhow::bail!(
+                "GoCD returned {status} rerunning stage: {}",
+                truncate(&body)
+            );
         }
         Ok(())
     }
@@ -225,7 +262,10 @@ impl GoCdClient {
         let status = resp.status();
         if !status.is_success() {
             let body = resp.text().unwrap_or_default();
-            anyhow::bail!("GoCD returned {status} pausing {pipeline_name}: {}", truncate(&body));
+            anyhow::bail!(
+                "GoCD returned {status} pausing {pipeline_name}: {}",
+                truncate(&body)
+            );
         }
         Ok(())
     }
@@ -240,24 +280,42 @@ impl GoCdClient {
         let status = resp.status();
         if !status.is_success() {
             let body = resp.text().unwrap_or_default();
-            anyhow::bail!("GoCD returned {status} unpausing {pipeline_name}: {}", truncate(&body));
+            anyhow::bail!(
+                "GoCD returned {status} unpausing {pipeline_name}: {}",
+                truncate(&body)
+            );
         }
         Ok(())
     }
 
     /// Cancels a currently-running stage instance. Does not affect future
     /// scheduling (that's pause/unpause) - this stops a build in flight.
-    pub fn cancel_stage(&self, pipeline_name: &str, pipeline_counter: i64, stage_name: &str, stage_counter: &str) -> Result<()> {
-        let path = format!("/api/stages/{pipeline_name}/{pipeline_counter}/{stage_name}/{stage_counter}/cancel");
+    pub fn cancel_stage(
+        &self,
+        pipeline_name: &str,
+        pipeline_counter: i64,
+        stage_name: &str,
+        stage_counter: &str,
+    ) -> Result<()> {
+        let path = format!(
+            "/api/stages/{pipeline_name}/{pipeline_counter}/{stage_name}/{stage_counter}/cancel"
+        );
         let resp = self
             .request(Method::POST, &path, 3)
             .header("X-GoCD-Confirm", "true")
             .send()
-            .with_context(|| format!("cancelling {pipeline_name}/{pipeline_counter}/{stage_name}/{stage_counter}"))?;
+            .with_context(|| {
+                format!(
+                    "cancelling {pipeline_name}/{pipeline_counter}/{stage_name}/{stage_counter}"
+                )
+            })?;
         let status = resp.status();
         if !status.is_success() {
             let body = resp.text().unwrap_or_default();
-            anyhow::bail!("GoCD returned {status} cancelling stage: {}", truncate(&body));
+            anyhow::bail!(
+                "GoCD returned {status} cancelling stage: {}",
+                truncate(&body)
+            );
         }
         Ok(())
     }
@@ -278,9 +336,13 @@ impl GoCdClient {
             .map(|t| t.replace("--gzip", ""));
         let body = resp.text().context("reading views body")?;
         if !status.is_success() {
-            anyhow::bail!("GoCD returned {status} for pipeline_selection: {}", truncate(&body));
+            anyhow::bail!(
+                "GoCD returned {status} for pipeline_selection: {}",
+                truncate(&body)
+            );
         }
-        let filters = serde_json::from_str(&body).with_context(|| format!("parsing views: {}", truncate(&body)))?;
+        let filters = serde_json::from_str(&body)
+            .with_context(|| format!("parsing views: {}", truncate(&body)))?;
         Ok((filters, etag))
     }
 
@@ -323,14 +385,20 @@ impl GoCdClient {
         stage_counter: &str,
         job_name: &str,
     ) -> Result<Vec<ArtifactNode>> {
-        let path = format!("/files/{pipeline_name}/{pipeline_counter}/{stage_name}/{stage_counter}/{job_name}.json");
-        let resp = self.request_raw(Method::GET, &path).send().context("requesting artifacts")?;
+        let path = format!(
+            "/files/{pipeline_name}/{pipeline_counter}/{stage_name}/{stage_counter}/{job_name}.json"
+        );
+        let resp = self
+            .request_raw(Method::GET, &path)
+            .send()
+            .context("requesting artifacts")?;
         let status = resp.status();
         let body = resp.text().context("reading artifacts body")?;
         if !status.is_success() {
             anyhow::bail!("GoCD returned {status} for artifacts: {}", truncate(&body));
         }
-        serde_json::from_str(&body).with_context(|| format!("parsing artifacts: {}", truncate(&body)))
+        serde_json::from_str(&body)
+            .with_context(|| format!("parsing artifacts: {}", truncate(&body)))
     }
 
     /// Raw job console output. Not part of the versioned JSON API - a plain
@@ -352,11 +420,17 @@ impl GoCdClient {
         if start_line > 0 {
             path.push_str(&format!("?startLineNumber={start_line}"));
         }
-        let resp = self.request_raw(Method::GET, &path).send().context("requesting console log")?;
+        let resp = self
+            .request_raw(Method::GET, &path)
+            .send()
+            .context("requesting console log")?;
         let status = resp.status();
         let body = resp.text().context("reading console log body")?;
         if !status.is_success() {
-            anyhow::bail!("GoCD returned {status} for console log: {}", truncate(&body));
+            anyhow::bail!(
+                "GoCD returned {status} for console log: {}",
+                truncate(&body)
+            );
         }
         Ok(body)
     }
