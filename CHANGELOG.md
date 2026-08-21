@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Snyk CI integration added: generates a CycloneDX SBOM for Cargo
+  dependencies and scans it with `snyk sbom test` when `SNYK_TOKEN` is
+  configured
+
 ## v0.4.1 - 2026-08-21
 
 - Release verification against a live GoCD 23.5.0 server: creating a
