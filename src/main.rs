@@ -3,6 +3,7 @@ mod app;
 mod config;
 mod github;
 mod model;
+mod notify;
 mod ui;
 
 use app::App;

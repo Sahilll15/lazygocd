@@ -6,6 +6,8 @@ use serde::Deserialize;
 pub struct GitHubClient {
     client: Client,
     token: Option<String>,
+    /// API root, e.g. "https://api.github.com" or a GHE instance's ".../api/v3".
+    api_base: String,
 }
 
 #[derive(Deserialize)]
@@ -28,19 +30,19 @@ pub fn resolve_token(configured: Option<String>) -> Option<String> {
 }
 
 impl GitHubClient {
-    pub fn new(token: Option<String>) -> Result<Self> {
+    pub fn new(token: Option<String>, api_base: &str) -> Result<Self> {
         let client = Client::builder()
             .timeout(std::time::Duration::from_secs(15))
             .connect_timeout(std::time::Duration::from_secs(8))
             .build()
             .context("building GitHub HTTP client")?;
-        Ok(GitHubClient { client, token: resolve_token(token) })
+        Ok(GitHubClient { client, token: resolve_token(token), api_base: api_base.trim_end_matches('/').to_string() })
     }
 
     /// Latest commit SHA on a branch. Works unauthenticated for public repos
     /// (rate-limited); private repos need a token with repo read access.
     pub fn latest_commit(&self, owner: &str, repo: &str, branch: &str) -> Result<String> {
-        let url = format!("https://api.github.com/repos/{owner}/{repo}/commits/{branch}");
+        let url = format!("{}/repos/{owner}/{repo}/commits/{branch}", self.api_base);
         let mut rb = self
             .client
             .get(&url)

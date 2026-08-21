@@ -91,8 +91,18 @@ impl GoCdClient {
         Ok(Some((parsed.embedded, new_etag)))
     }
 
-    pub fn fetch_history(&self, pipeline_name: &str) -> Result<Vec<PipelineInstance>> {
-        let path = format!("/api/pipelines/{pipeline_name}/history");
+    /// One page of run history, newest first. `after` is the cursor from the
+    /// previous page's _links.next.href; None fetches the first page. Returns
+    /// the page's runs plus the next-page cursor, if any.
+    pub fn fetch_history_page(
+        &self,
+        pipeline_name: &str,
+        after: Option<u64>,
+    ) -> Result<(Vec<PipelineInstance>, Option<u64>)> {
+        let mut path = format!("/api/pipelines/{pipeline_name}/history");
+        if let Some(cursor) = after {
+            path.push_str(&format!("?after={cursor}"));
+        }
         let resp = self
             .request(Method::GET, &path, 1)
             .send()
@@ -104,7 +114,11 @@ impl GoCdClient {
         }
         let parsed: HistoryResponse = serde_json::from_str(&body)
             .with_context(|| format!("parsing history response for {pipeline_name}: {}", truncate(&body)))?;
-        Ok(parsed.pipelines)
+        let next = parsed
+            .links
+            .and_then(|l| l.next)
+            .and_then(|n| crate::model::next_page_cursor(&n.href));
+        Ok((parsed.pipelines, next))
     }
 
     pub fn trigger_pipeline(&self, pipeline_name: &str) -> Result<()> {
@@ -120,6 +134,74 @@ impl GoCdClient {
         if !status.is_success() {
             let body = resp.text().unwrap_or_default();
             anyhow::bail!("GoCD returned {status} triggering {pipeline_name}: {}", truncate(&body));
+        }
+        Ok(())
+    }
+
+    /// Trigger with one-off environment variable overrides for this run.
+    pub fn trigger_pipeline_with_vars(&self, pipeline_name: &str, vars: &[(String, String)]) -> Result<()> {
+        let env: Vec<serde_json::Value> = vars
+            .iter()
+            .map(|(name, value)| serde_json::json!({ "name": name, "value": value, "secure": false }))
+            .collect();
+        let path = format!("/api/pipelines/{pipeline_name}/schedule");
+        let resp = self
+            .request(Method::POST, &path, 1)
+            .header("X-GoCD-Confirm", "true")
+            .json(&serde_json::json!({
+                "environment_variables": env,
+                "update_materials_before_scheduling": true,
+            }))
+            .send()
+            .with_context(|| format!("triggering {pipeline_name} with variables"))?;
+        let status = resp.status();
+        if !status.is_success() {
+            let body = resp.text().unwrap_or_default();
+            anyhow::bail!("GoCD returned {status} triggering {pipeline_name}: {}", truncate(&body));
+        }
+        Ok(())
+    }
+
+    /// Reruns only the failed jobs of a completed stage instance.
+    pub fn rerun_failed_jobs(
+        &self,
+        pipeline_name: &str,
+        pipeline_counter: i64,
+        stage_name: &str,
+        stage_counter: &str,
+    ) -> Result<()> {
+        self.rerun(pipeline_name, pipeline_counter, stage_name, stage_counter, "run-failed-jobs")
+    }
+
+    /// Reruns the whole stage instance (all jobs, passed ones included).
+    pub fn rerun_stage(
+        &self,
+        pipeline_name: &str,
+        pipeline_counter: i64,
+        stage_name: &str,
+        stage_counter: &str,
+    ) -> Result<()> {
+        self.rerun(pipeline_name, pipeline_counter, stage_name, stage_counter, "run")
+    }
+
+    fn rerun(
+        &self,
+        pipeline_name: &str,
+        pipeline_counter: i64,
+        stage_name: &str,
+        stage_counter: &str,
+        verb: &str,
+    ) -> Result<()> {
+        let path = format!("/api/stages/{pipeline_name}/{pipeline_counter}/{stage_name}/{stage_counter}/{verb}");
+        let resp = self
+            .request(Method::POST, &path, 3)
+            .header("X-GoCD-Confirm", "true")
+            .send()
+            .with_context(|| format!("rerunning ({verb}) {pipeline_name}/{pipeline_counter}/{stage_name}/{stage_counter}"))?;
+        let status = resp.status();
+        if !status.is_success() {
+            let body = resp.text().unwrap_or_default();
+            anyhow::bail!("GoCD returned {status} rerunning stage: {}", truncate(&body));
         }
         Ok(())
     }

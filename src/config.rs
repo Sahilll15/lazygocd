@@ -24,10 +24,25 @@ pub struct Config {
     /// latest commit against what's deployed. Unset = unauthenticated (public repos only).
     #[serde(default)]
     pub github_token: Option<String>,
+    /// GitHub REST API root used for stale-deploy checks. Point this at your
+    /// GitHub Enterprise instance's /api/v3 to check repos hosted there.
+    #[serde(default = "default_github_api_base")]
+    pub github_api_base: String,
+    /// Desktop notification when a favorited pipeline's latest run turns Failed.
+    #[serde(default = "default_true")]
+    pub notifications: bool,
 }
 
 fn default_poll_interval() -> u64 {
     30
+}
+
+fn default_github_api_base() -> String {
+    "https://api.github.com".to_string()
+}
+
+fn default_true() -> bool {
+    true
 }
 
 impl Default for Config {
@@ -40,6 +55,8 @@ impl Default for Config {
             insecure_skip_verify: false,
             poll_interval_secs: default_poll_interval(),
             github_token: None,
+            github_api_base: default_github_api_base(),
+            notifications: true,
         }
     }
 }

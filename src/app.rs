@@ -21,16 +21,22 @@ pub enum Focus {
 #[derive(Debug, Clone)]
 pub enum PendingAction {
     Trigger(String),
+    TriggerWithVars { pipeline: String, vars: Vec<(String, String)> },
     Pause(String),
     Unpause(String),
     CancelStage { pipeline: String, pipeline_counter: i64, stage: String, stage_counter: String },
+    RerunFailedJobs { pipeline: String, pipeline_counter: i64, stage: String, stage_counter: String },
+    RerunStage { pipeline: String, pipeline_counter: i64, stage: String, stage_counter: String },
 }
 
 impl PendingAction {
     fn name(&self) -> &str {
         match self {
             PendingAction::Trigger(n) | PendingAction::Pause(n) | PendingAction::Unpause(n) => n,
-            PendingAction::CancelStage { pipeline, .. } => pipeline,
+            PendingAction::TriggerWithVars { pipeline, .. }
+            | PendingAction::CancelStage { pipeline, .. }
+            | PendingAction::RerunFailedJobs { pipeline, .. }
+            | PendingAction::RerunStage { pipeline, .. } => pipeline,
         }
     }
 }
@@ -151,12 +157,24 @@ impl ReauthForm {
     }
 }
 
+/// 'T' trigger-with-variables form: NAME=VALUE entries typed one per line,
+/// an empty entry moves to the confirm step.
+#[derive(Debug, Clone)]
+pub struct TriggerVarsForm {
+    pub pipeline: String,
+    pub vars: Vec<(String, String)>,
+    pub input: String,
+    pub confirming: bool,
+    pub error: Option<String>,
+}
+
 #[derive(Debug, Clone)]
 pub enum Modal {
     Help,
     Confirm { action: PendingAction, message: String },
     Reauth(ReauthForm),
     GithubConnect { input: String },
+    TriggerVars(TriggerVarsForm),
     ConsoleLog(Box<ConsoleLogState>),
 }
 
@@ -189,12 +207,21 @@ enum SelectionKey {
 /// Fresh dashboard payload: groups, pipelines, and the response's ETag.
 pub type DashboardPayload = (Vec<DashboardGroup>, Vec<DashboardPipeline>, Option<String>);
 
+/// One history page: its runs plus the next-page cursor, if more exist.
+pub type HistoryPage = (Vec<PipelineInstance>, Option<u64>);
+
 pub enum ApiEvent {
     /// None payload = HTTP 304, nothing changed since the ETag we sent.
     Dashboard(u64, Result<Option<DashboardPayload>, String>),
-    History(String, Result<Vec<PipelineInstance>, String>),
+    /// First page (full reload) of a pipeline's history.
+    History(String, Result<HistoryPage, String>),
+    /// A later page to append. `issued_last_counter` is the counter of the last
+    /// loaded run when the fetch started - if it moved (a refresh interleaved),
+    /// the page is stale and dropped.
+    HistoryMore { name: String, after: u64, issued_last_counter: i64, result: Result<HistoryPage, String> },
     ActionDone(PendingAction, Result<String, String>),
-    GithubLatest(String, Result<String, String>),
+    /// (pipeline, GitRef::key() of the material this check was for, result).
+    GithubLatest(String, String, Result<String, String>),
     /// usize = the 0-based line this fetch started from (0 = full log).
     ConsoleLog(JobRef, usize, Result<String, String>),
     Artifacts(JobRef, Result<Vec<ArtifactNode>, String>),
@@ -240,6 +267,10 @@ pub struct App {
     /// Every pipeline's last-fetched history, so reopening one already viewed
     /// this session is instant while a background refresh keeps it current.
     pub history_cache: HashMap<String, Vec<PipelineInstance>>,
+    /// Next-page cursor per pipeline; absent = fully loaded (or never fetched).
+    pub history_next: HashMap<String, u64>,
+    /// (pipeline, after-cursor) of the one in-flight page append, if any.
+    pub history_more_inflight: Option<(String, u64)>,
     /// Debounced hover target: (pipeline name, when the cursor landed on it).
     /// Prefetched into history_cache if the cursor stays put past HOVER_PREFETCH_DELAY.
     pub hover_target: Option<(String, Instant)>,
@@ -252,7 +283,10 @@ pub struct App {
     pub last_console_poll: Instant,
 
     pub github: GitHubClient,
-    pub github_ref: Option<GitRef>,
+    /// One check per git material of the open pipeline's latest run, in material
+    /// order. Entry 0 is the "primary" material that drives 'o' compare links.
+    pub github_checks: Vec<(GitRef, GithubState)>,
+    /// Mirror of the FIRST material's check, kept for the compare-URL logic.
     pub github_state: GithubState,
 
     /// Bumped on reconnect; in-flight responses from a previous server are
@@ -323,7 +357,7 @@ const HOVER_PREFETCH_DELAY: Duration = Duration::from_millis(300);
 impl App {
     pub fn new(cfg: &Config) -> anyhow::Result<Self> {
         let client = GoCdClient::new(cfg)?;
-        let github = GitHubClient::new(cfg.github_token.clone())?;
+        let github = GitHubClient::new(cfg.github_token.clone(), &cfg.github_api_base)?;
         let (tx, rx) = mpsc::channel();
         let needs_setup = cfg.server_url.trim().is_empty();
 
@@ -371,13 +405,15 @@ impl App {
             history_selected: 0,
             history_loading: false,
             history_cache: HashMap::new(),
+            history_next: HashMap::new(),
+            history_more_inflight: None,
             hover_target: None,
             last_poll: Instant::now(),
             detail_rows: Vec::new(),
             detail_selected: 0,
             last_console_poll: Instant::now(),
             github,
-            github_ref: None,
+            github_checks: Vec::new(),
             github_state: GithubState::Idle,
             server_gen: 0,
             dashboard_etag: None,
@@ -418,7 +454,7 @@ impl App {
         let client = self.client.clone();
         let tx = self.tx.clone();
         thread::spawn(move || {
-            let result = client.fetch_history(&name).map_err(|e| format!("{e:#}"));
+            let result = client.fetch_history_page(&name, None).map_err(|e| format!("{e:#}"));
             let _ = tx.send(ApiEvent::History(name, result));
         });
     }
@@ -429,19 +465,60 @@ impl App {
         let client = self.client.clone();
         let tx = self.tx.clone();
         thread::spawn(move || {
-            let result = client.fetch_history(&name).map_err(|e| format!("{e:#}"));
+            let result = client.fetch_history_page(&name, None).map_err(|e| format!("{e:#}"));
             let _ = tx.send(ApiEvent::History(name, result));
         });
     }
 
-    fn spawn_check_github(&self, pipeline_name: String, git_ref: &GitRef) {
-        let github = self.github.clone();
+    /// Selection landed on the last loaded history row: if a next-page cursor
+    /// exists and nothing is already in flight, fetch and append the next page.
+    fn maybe_load_more_history(&mut self) {
+        if self.history_more_inflight.is_some() || self.history.is_empty() {
+            return;
+        }
+        if self.history_selected + 1 < self.history.len() {
+            return;
+        }
+        let Some(name) = self.selected_pipeline.clone() else { return };
+        let Some(&after) = self.history_next.get(&name) else { return };
+        let issued_last_counter = self.history.last().map(|i| i.counter).unwrap_or(0);
+        self.history_more_inflight = Some((name.clone(), after));
+        self.status_line = format!("\u{2026}loading more runs of {name}");
+        let client = self.client.clone();
         let tx = self.tx.clone();
-        let (owner, repo, branch) = (git_ref.owner.clone(), git_ref.repo.clone(), git_ref.branch.clone());
         thread::spawn(move || {
-            let result = github.latest_commit(&owner, &repo, &branch).map_err(|e| format!("{e:#}"));
-            let _ = tx.send(ApiEvent::GithubLatest(pipeline_name, result));
+            let result = client.fetch_history_page(&name, Some(after)).map_err(|e| format!("{e:#}"));
+            let _ = tx.send(ApiEvent::HistoryMore { name, after, issued_last_counter, result });
         });
+    }
+
+    /// One check per git material, each reporting back under its GitRef::key().
+    fn spawn_check_github(&self, pipeline_name: String, refs: &[GitRef]) {
+        for git_ref in refs {
+            let github = self.github.clone();
+            let tx = self.tx.clone();
+            let pipeline = pipeline_name.clone();
+            let key = git_ref.key();
+            let (owner, repo, branch) = (git_ref.owner.clone(), git_ref.repo.clone(), git_ref.branch.clone());
+            thread::spawn(move || {
+                let result = github.latest_commit(&owner, &repo, &branch).map_err(|e| format!("{e:#}"));
+                let _ = tx.send(ApiEvent::GithubLatest(pipeline, key, result));
+            });
+        }
+    }
+
+    /// Resets the per-material checks for the open pipeline's latest run and
+    /// kicks off one background check per material.
+    fn start_github_checks(&mut self, pipeline: String) {
+        let refs = self.history.first().map(|i| i.git_refs()).unwrap_or_default();
+        if refs.is_empty() {
+            self.github_checks.clear();
+            self.github_state = GithubState::Idle;
+            return;
+        }
+        self.github_checks = refs.iter().cloned().map(|r| (r, GithubState::Checking)).collect();
+        self.github_state = GithubState::Checking;
+        self.spawn_check_github(pipeline, &refs);
     }
 
     fn spawn_console_fetch(&self, job_ref: JobRef) {
@@ -472,6 +549,9 @@ impl App {
         thread::spawn(move || {
             let result = match &action {
                 PendingAction::Trigger(name) => client.trigger_pipeline(name).map(|_| format!("Triggered {name}")),
+                PendingAction::TriggerWithVars { pipeline, vars } => client
+                    .trigger_pipeline_with_vars(pipeline, vars)
+                    .map(|_| format!("Triggered {pipeline} with {} variable(s)", vars.len())),
                 PendingAction::Pause(name) => client
                     .pause_pipeline(name, "paused via lazygocd")
                     .map(|_| format!("Paused {name}")),
@@ -479,6 +559,12 @@ impl App {
                 PendingAction::CancelStage { pipeline, pipeline_counter, stage, stage_counter } => client
                     .cancel_stage(pipeline, *pipeline_counter, stage, stage_counter)
                     .map(|_| format!("Cancelled {stage} on {pipeline}")),
+                PendingAction::RerunFailedJobs { pipeline, pipeline_counter, stage, stage_counter } => client
+                    .rerun_failed_jobs(pipeline, *pipeline_counter, stage, stage_counter)
+                    .map(|_| format!("Rerunning failed jobs of {stage} on {pipeline}")),
+                PendingAction::RerunStage { pipeline, pipeline_counter, stage, stage_counter } => client
+                    .rerun_stage(pipeline, *pipeline_counter, stage, stage_counter)
+                    .map(|_| format!("Rerunning stage {stage} on {pipeline}")),
             };
             let _ = tx.send(ApiEvent::ActionDone(action, result.map_err(|e| format!("{e:#}"))));
         });
@@ -505,8 +591,15 @@ impl App {
                 // Re-anchor the cursor by name after the refresh: groups/pipelines can
                 // shift position, and a bare index would land on an unrelated row.
                 let key = self.selection_key();
+                let new_info: HashMap<String, DashboardPipeline> =
+                    pipelines.into_iter().map(|p| (p.name.clone(), p)).collect();
+                if self.cfg.notifications {
+                    for name in new_failures(&self.pipeline_info, &new_info, &self.favorites) {
+                        crate::notify::notify("lazygocd", &format!("Pipeline {name} failed"));
+                    }
+                }
                 self.groups = groups;
-                self.pipeline_info = pipelines.into_iter().map(|p| (p.name.clone(), p)).collect();
+                self.pipeline_info = new_info;
                 self.loading_groups = false;
                 self.rebuild_rows();
                 self.restore_selection(key);
@@ -515,12 +608,25 @@ impl App {
                 self.loading_groups = false;
                 self.error_line = Some(format!("Failed to load dashboard: {e}{}", auth_hint(&e)));
             }
-            ApiEvent::History(name, Ok(instances)) => {
+            ApiEvent::History(name, Ok((instances, next))) => {
+                let cached = self.history_cache.remove(&name).unwrap_or_default();
+                let (instances, kept_tail) = merge_history_pages(instances, cached);
                 // Cache regardless of whether this pipeline is the one currently open -
                 // a hover-prefetch result lands here too, ready for an instant open later.
                 self.history_cache.insert(name.clone(), instances.clone());
+                // When the older tail was kept, the stored deeper cursor still applies;
+                // otherwise pagination resets to page one's cursor.
+                if !kept_tail {
+                    match next {
+                        Some(cursor) => {
+                            self.history_next.insert(name.clone(), cursor);
+                        }
+                        None => {
+                            self.history_next.remove(&name);
+                        }
+                    }
+                }
                 if self.selected_pipeline.as_deref() == Some(name.as_str()) {
-                    self.github_ref = instances.first().and_then(|i| i.git_ref());
                     self.history = instances;
                     // Only snap back to the latest run if the previous selection no longer
                     // exists - a background refresh shouldn't yank you away from an older run
@@ -531,12 +637,7 @@ impl App {
                     self.rebuild_detail_rows();
                     self.history_loading = false;
                     self.status_line = format!("Loaded history for {name}");
-                    if let Some(git_ref) = self.github_ref.clone() {
-                        self.github_state = GithubState::Checking;
-                        self.spawn_check_github(name, &git_ref);
-                    } else {
-                        self.github_state = GithubState::Idle;
-                    }
+                    self.start_github_checks(name);
                 }
             }
             ApiEvent::History(name, Err(e)) => {
@@ -547,10 +648,48 @@ impl App {
                     self.error_line = Some(format!("Failed to load history for {name}: {e}{}", auth_hint(&e)));
                 }
             }
+            ApiEvent::HistoryMore { name, after, issued_last_counter, result } => {
+                // Only the fetch we actually issued may land; anything else is stale.
+                if self.history_more_inflight.as_ref() != Some(&(name.clone(), after)) {
+                    return;
+                }
+                self.history_more_inflight = None;
+                match result {
+                    Ok((instances, next)) => {
+                        // If a full refresh landed meanwhile, the cache's tail moved and
+                        // appending would duplicate/interleave rows - drop the page.
+                        let tail_counter = self.history_cache.get(&name).and_then(|v| v.last()).map(|i| i.counter);
+                        if tail_counter != Some(issued_last_counter) {
+                            return;
+                        }
+                        match next {
+                            Some(cursor) => {
+                                self.history_next.insert(name.clone(), cursor);
+                            }
+                            None => {
+                                self.history_next.remove(&name);
+                            }
+                        }
+                        let count = instances.len();
+                        if let Some(cached) = self.history_cache.get_mut(&name) {
+                            cached.extend(instances.clone());
+                        }
+                        if self.selected_pipeline.as_deref() == Some(name.as_str()) {
+                            self.history.extend(instances);
+                            self.status_line = format!("Loaded {count} more run(s) ({} total)", self.history.len());
+                        }
+                    }
+                    Err(e) => {
+                        if self.selected_pipeline.as_deref() == Some(name.as_str()) {
+                            self.error_line = Some(format!("Failed to load more history for {name}: {e}{}", auth_hint(&e)));
+                        }
+                    }
+                }
+            }
             ApiEvent::ActionDone(action, Ok(msg)) => {
                 self.status_line = msg;
                 match &action {
-                    PendingAction::Trigger(name) => {
+                    PendingAction::Trigger(name) | PendingAction::TriggerWithVars { pipeline: name, .. } => {
                         if self.selected_pipeline.as_deref() == Some(name.as_str()) {
                             self.spawn_load_history(name.clone());
                         }
@@ -565,7 +704,9 @@ impl App {
                             info.pause_info.paused = false;
                         }
                     }
-                    PendingAction::CancelStage { pipeline, .. } => {
+                    PendingAction::CancelStage { pipeline, .. }
+                    | PendingAction::RerunFailedJobs { pipeline, .. }
+                    | PendingAction::RerunStage { pipeline, .. } => {
                         if self.selected_pipeline.as_deref() == Some(pipeline.as_str()) {
                             self.spawn_load_history(pipeline.clone());
                         }
@@ -575,12 +716,18 @@ impl App {
             ApiEvent::ActionDone(action, Err(e)) => {
                 self.error_line = Some(format!("Action on {} failed: {e}{}", action.name(), auth_hint(&e)));
             }
-            ApiEvent::GithubLatest(name, result) => {
+            ApiEvent::GithubLatest(name, key, result) => {
                 if self.selected_pipeline.as_deref() == Some(name.as_str()) {
-                    self.github_state = match result {
+                    let state = match result {
                         Ok(sha) => GithubState::Found(sha),
                         Err(e) => GithubState::Failed(e),
                     };
+                    if self.github_checks.first().is_some_and(|(r, _)| r.key() == key) {
+                        self.github_state = state.clone();
+                    }
+                    if let Some(entry) = self.github_checks.iter_mut().find(|(r, _)| r.key() == key) {
+                        entry.1 = state;
+                    }
                 }
             }
             ApiEvent::ConsoleLog(job_ref, start_line, result) => {
@@ -665,8 +812,10 @@ impl App {
             }
             KeyCode::Char('r') => self.refresh(),
             KeyCode::Char('t') => self.request_action(PendingAction::Trigger),
+            KeyCode::Char('T') => self.request_trigger_with_vars(),
             KeyCode::Char('p') => self.request_pause_toggle(),
             KeyCode::Char('X') => self.request_cancel(),
+            KeyCode::Char('R') => self.request_rerun(),
             KeyCode::Char('f') => self.toggle_favorite(),
             KeyCode::Char('o') => self.open_in_browser(),
             KeyCode::Char('y') => self.copy_selected(),
@@ -720,12 +869,27 @@ impl App {
                     self.modal = None;
                     let label = match &action {
                         PendingAction::Trigger(n) => format!("Triggering {n}..."),
+                        PendingAction::TriggerWithVars { pipeline, .. } => format!("Triggering {pipeline}..."),
                         PendingAction::Pause(n) => format!("Pausing {n}..."),
                         PendingAction::Unpause(n) => format!("Unpausing {n}..."),
                         PendingAction::CancelStage { pipeline, stage, .. } => format!("Cancelling {stage} on {pipeline}..."),
+                        PendingAction::RerunFailedJobs { pipeline, stage, .. } => {
+                            format!("Rerunning failed jobs of {stage} on {pipeline}...")
+                        }
+                        PendingAction::RerunStage { pipeline, stage, .. } => {
+                            format!("Rerunning stage {stage} on {pipeline}...")
+                        }
                     };
                     self.status_line = label;
                     self.spawn_action(action);
+                }
+                // Escalate a failed-jobs rerun to the whole stage.
+                KeyCode::Char('a') => {
+                    if let PendingAction::RerunFailedJobs { pipeline, pipeline_counter, stage, stage_counter } = action {
+                        self.modal = None;
+                        self.status_line = format!("Rerunning stage {stage} on {pipeline}...");
+                        self.spawn_action(PendingAction::RerunStage { pipeline, pipeline_counter, stage, stage_counter });
+                    }
                 }
                 KeyCode::Char('n') | KeyCode::Esc => {
                     self.modal = None;
@@ -734,8 +898,59 @@ impl App {
             },
             Modal::Reauth(form) => self.handle_reauth_key(key, form),
             Modal::GithubConnect { input } => self.handle_github_connect_key(key, input),
+            Modal::TriggerVars(form) => self.handle_trigger_vars_key(key, form),
             Modal::ConsoleLog(state) => self.handle_console_log_key(key, *state),
         }
+    }
+
+    fn handle_trigger_vars_key(&mut self, key: KeyEvent, mut form: TriggerVarsForm) {
+        if key.code == KeyCode::Esc {
+            self.modal = None;
+            return;
+        }
+        if form.confirming {
+            match key.code {
+                KeyCode::Char('y') | KeyCode::Enter => {
+                    self.modal = None;
+                    self.status_line = format!("Triggering {}...", form.pipeline);
+                    self.spawn_action(PendingAction::TriggerWithVars { pipeline: form.pipeline, vars: form.vars });
+                    return;
+                }
+                KeyCode::Char('n') => {
+                    self.modal = None;
+                    return;
+                }
+                KeyCode::Backspace => form.confirming = false,
+                _ => {}
+            }
+        } else {
+            match key.code {
+                KeyCode::Backspace => {
+                    form.input.pop();
+                }
+                KeyCode::Enter => {
+                    let entry = form.input.trim().to_string();
+                    if entry.is_empty() {
+                        form.confirming = true;
+                        form.error = None;
+                    } else {
+                        match parse_env_var(&entry) {
+                            Some(var) => {
+                                form.vars.push(var);
+                                form.input.clear();
+                                form.error = None;
+                            }
+                            None => form.error = Some("Expected NAME=VALUE".to_string()),
+                        }
+                    }
+                }
+                KeyCode::Char(c) => {
+                    form.input.push(c);
+                }
+                _ => {}
+            }
+        }
+        self.modal = Some(Modal::TriggerVars(form));
     }
 
     fn handle_console_log_key(&mut self, key: KeyEvent, mut state: ConsoleLogState) {
@@ -1016,11 +1231,13 @@ impl App {
                 self.history.clear();
                 self.history_selected = 0;
                 self.history_cache.clear();
+                self.history_next.clear();
+                self.history_more_inflight = None;
                 self.expanded.clear();
                 self.hover_target = None;
                 self.detail_rows.clear();
                 self.detail_selected = 0;
-                self.github_ref = None;
+                self.github_checks.clear();
                 self.github_state = GithubState::Idle;
                 self.loading_groups = true;
                 self.spawn_load_dashboard();
@@ -1047,7 +1264,7 @@ impl App {
                 let token = input.trim().to_string();
                 self.modal = None;
                 self.cfg.github_token = (!token.is_empty()).then_some(token.clone());
-                match GitHubClient::new(self.cfg.github_token.clone()) {
+                match GitHubClient::new(self.cfg.github_token.clone(), &self.cfg.github_api_base) {
                     Ok(client) => {
                         self.github = client;
                         self.status_line = if token.is_empty() {
@@ -1060,12 +1277,11 @@ impl App {
                         {
                             self.error_line = Some(format!("Connected, but failed to save config: {e}"));
                         }
-                        // Retry the current pipeline's check, if any, against the new token.
-                        if let Some(git_ref) = self.github_ref.clone()
-                            && let Some(name) = self.selected_pipeline.clone()
+                        // Retry the current pipeline's checks, if any, against the new token.
+                        if let Some(name) = self.selected_pipeline.clone()
+                            && !self.github_checks.is_empty()
                         {
-                            self.github_state = GithubState::Checking;
-                            self.spawn_check_github(name, &git_ref);
+                            self.start_github_checks(name);
                         }
                     }
                     Err(e) => {
@@ -1193,7 +1409,7 @@ impl App {
     pub fn needs_animation(&self) -> bool {
         self.loading_groups
             || self.history_loading
-            || matches!(self.github_state, GithubState::Checking)
+            || self.github_checks.iter().any(|(_, s)| matches!(s, GithubState::Checking))
             || matches!(&self.modal, Some(Modal::ConsoleLog(s)) if s.loading || s.artifacts_loading)
     }
 
@@ -1255,6 +1471,7 @@ impl App {
                 if self.history_selected != idx {
                     self.history_selected = idx;
                     self.rebuild_detail_rows();
+                    self.maybe_load_more_history();
                 }
             }
             Focus::Detail => {}
@@ -1300,12 +1517,72 @@ impl App {
                 PendingAction::Trigger(_) => format!("Trigger a new run of '{name}'?"),
                 PendingAction::Pause(_) => format!("Pause '{name}'?"),
                 PendingAction::Unpause(_) => format!("Unpause '{name}'?"),
-                // request_action is only ever called with Trigger; CancelStage goes
-                // through request_cancel(), which builds its own message.
-                PendingAction::CancelStage { .. } => unreachable!(),
+                // request_action is only ever called with Trigger; the other actions
+                // go through their own request_* fns, which build their own messages.
+                _ => unreachable!(),
             };
             self.modal = Some(Modal::Confirm { action, message });
         }
+    }
+
+    /// 'T': trigger with one-off environment variable overrides.
+    fn request_trigger_with_vars(&mut self) {
+        if let Some(name) = self.current_row_pipeline_name() {
+            self.modal = Some(Modal::TriggerVars(TriggerVarsForm {
+                pipeline: name,
+                vars: Vec::new(),
+                input: String::new(),
+                confirming: false,
+                error: None,
+            }));
+        }
+    }
+
+    /// 'R': rerun the failed jobs of the selected run's failed stage. In Detail
+    /// focus the stage under the cursor wins if it failed; otherwise the run's
+    /// first failed stage.
+    fn request_rerun(&mut self) {
+        if self.focus == Focus::Groups {
+            self.status_line = "Open a pipeline first (enter) to rerun a failed stage".to_string();
+            return;
+        }
+        let Some(pipeline) = self.selected_pipeline.clone() else { return };
+        let Some(inst) = self.history.get(self.history_selected) else { return };
+        if inst.overall_status() == "Passed" {
+            self.status_line = format!("Run #{} passed - nothing failed to rerun", inst.counter);
+            return;
+        }
+        let cursor_stage_idx = (self.focus == Focus::Detail)
+            .then(|| self.detail_rows.get(self.detail_selected))
+            .flatten()
+            .map(|r| match r {
+                DetailRow::Stage(si) | DetailRow::Job(si, _) => *si,
+            });
+        let failed = |s: &&crate::model::StageInstance| s.status.as_deref() == Some("Failed");
+        let stage = cursor_stage_idx
+            .and_then(|si| inst.stages.get(si))
+            .filter(|s| failed(s))
+            .or_else(|| inst.stages.iter().find(failed));
+        let Some(stage) = stage else {
+            self.status_line = format!("No failed stage in run #{}", inst.counter);
+            return;
+        };
+        let Some(stage_counter) = stage.counter.clone() else {
+            self.error_line = Some("Stage counter unavailable, can't rerun".to_string());
+            return;
+        };
+        let stage_name = stage.name.clone();
+        let message = format!(
+            "Rerun failed jobs of stage '{stage_name}' on '{pipeline}' run #{}?\n('a' reruns the whole stage instead)",
+            inst.counter
+        );
+        let action = PendingAction::RerunFailedJobs {
+            pipeline,
+            pipeline_counter: inst.counter,
+            stage: stage_name,
+            stage_counter,
+        };
+        self.modal = Some(Modal::Confirm { action, message });
     }
 
     fn request_pause_toggle(&mut self) {
@@ -1416,10 +1693,13 @@ impl App {
         let is_latest_run = self.history_selected == 0 && self.focus != Focus::Groups;
         let url = match (&self.github_state, is_latest_run) {
             (GithubState::Found(latest), true) if *latest != git_ref.deployed_sha => format!(
-                "https://github.com/{}/{}/compare/{}...{}",
-                git_ref.owner, git_ref.repo, git_ref.deployed_sha, latest
+                "https://{}/{}/{}/compare/{}...{}",
+                git_ref.host, git_ref.owner, git_ref.repo, git_ref.deployed_sha, latest
             ),
-            _ => format!("https://github.com/{}/{}/commit/{}", git_ref.owner, git_ref.repo, git_ref.deployed_sha),
+            _ => format!(
+                "https://{}/{}/{}/commit/{}",
+                git_ref.host, git_ref.owner, git_ref.repo, git_ref.deployed_sha
+            ),
         };
         match open_url(&url) {
             Ok(()) => self.status_line = format!("Opened {url}"),
@@ -1462,6 +1742,7 @@ impl App {
             Focus::History => {
                 self.history_selected = idx;
                 self.rebuild_detail_rows();
+                self.maybe_load_more_history();
             }
             Focus::Detail => self.detail_selected = idx,
         }
@@ -1545,19 +1826,13 @@ impl App {
 
         if let Some(cached) = self.history_cache.get(&name).cloned() {
             // Instant from cache; still refresh in the background to stay current.
-            self.github_ref = cached.first().and_then(|i| i.git_ref());
             self.history = cached;
             self.history_loading = false;
             self.status_line = format!("{name} (cached, refreshing...)");
-            if let Some(git_ref) = self.github_ref.clone() {
-                self.github_state = GithubState::Checking;
-                self.spawn_check_github(name.clone(), &git_ref);
-            } else {
-                self.github_state = GithubState::Idle;
-            }
+            self.start_github_checks(name.clone());
         } else {
             self.history.clear();
-            self.github_ref = None;
+            self.github_checks.clear();
             self.github_state = GithubState::Idle;
             self.status_line = format!("Loading history for {name}...");
         }
@@ -1743,6 +2018,53 @@ fn console_scroll_up(state: &mut ConsoleLogState, view_height: u16, lines: usize
     state.following = false;
 }
 
+/// A page-one reload landed while deeper pages were already loaded (background
+/// polls do this): keep the older tail when the fresh page overlaps it, so
+/// pagination the user scrolled into survives refreshes. Returns the merged
+/// list and whether the previously-stored next-page cursor still applies.
+fn merge_history_pages(fresh: Vec<PipelineInstance>, cached: Vec<PipelineInstance>) -> (Vec<PipelineInstance>, bool) {
+    let (Some(fresh_last), Some(cached_first)) = (fresh.last(), cached.first()) else {
+        return (fresh, false);
+    };
+    // A fresh page that doesn't reach back into the cached range would leave a
+    // gap between the two - drop the tail rather than show a hole.
+    if cached.len() <= fresh.len() || fresh_last.counter > cached_first.counter {
+        return (fresh, false);
+    }
+    let cutoff = fresh_last.counter;
+    let mut merged = fresh;
+    merged.extend(cached.into_iter().filter(|i| i.counter < cutoff));
+    (merged, true)
+}
+
+/// "NAME=VALUE" -> (NAME, VALUE). Name is trimmed and must be nonempty; the
+/// value is kept verbatim (it may itself contain '=').
+fn parse_env_var(entry: &str) -> Option<(String, String)> {
+    let (name, value) = entry.split_once('=')?;
+    let name = name.trim();
+    (!name.is_empty()).then(|| (name.to_string(), value.to_string()))
+}
+
+/// Favorited pipelines whose latest-run status transitioned to Failed between
+/// two dashboard snapshots. Edge-triggered (old status must be known and
+/// non-Failed), so a pipeline that stays red never re-notifies.
+fn new_failures(
+    old: &HashMap<String, DashboardPipeline>,
+    new: &HashMap<String, DashboardPipeline>,
+    favorites: &HashSet<String>,
+) -> Vec<String> {
+    let mut names: Vec<String> = favorites
+        .iter()
+        .filter(|name| {
+            new.get(*name).map(|p| p.latest_status()) == Some("Failed")
+                && old.get(*name).is_some_and(|p| p.latest_status() != "Failed")
+        })
+        .cloned()
+        .collect();
+    names.sort();
+    names
+}
+
 /// fzf-style subsequence match: every query char (spaces ignored) must appear
 /// in order, case-insensitive. Returns the matched char positions for highlighting.
 pub fn fuzzy_match(haystack: &str, needle: &str) -> Option<Vec<usize>> {
@@ -1833,5 +2155,102 @@ mod tests {
         assert_eq!(fuzzy_match("abc", ""), Some(vec![]));
         // Chars must appear in order, not just anywhere.
         assert_eq!(fuzzy_match("ba", "ab"), None);
+    }
+
+    #[test]
+    fn parse_env_var_forms() {
+        assert_eq!(super::parse_env_var("FOO=bar"), Some(("FOO".into(), "bar".into())));
+        assert_eq!(super::parse_env_var(" FOO =a=b"), Some(("FOO".into(), "a=b".into())));
+        assert_eq!(super::parse_env_var("FOO="), Some(("FOO".into(), String::new())));
+        assert_eq!(super::parse_env_var("=bar"), None);
+        assert_eq!(super::parse_env_var("no-equals"), None);
+    }
+
+    use crate::model::{DashboardInstance, DashboardInstanceEmbedded, DashboardPipeline, DashboardPipelineEmbedded, DashboardStage, PauseInfo};
+    use std::collections::{HashMap, HashSet};
+
+    fn pipeline(name: &str, status: &str) -> DashboardPipeline {
+        DashboardPipeline {
+            name: name.to_string(),
+            locked: false,
+            pause_info: PauseInfo::default(),
+            can_pause: true,
+            can_operate: true,
+            embedded: DashboardPipelineEmbedded {
+                instances: vec![DashboardInstance {
+                    label: "l".into(),
+                    counter: 1,
+                    triggered_by: None,
+                    embedded: DashboardInstanceEmbedded {
+                        stages: vec![DashboardStage { name: "build".into(), status: Some(status.to_string()) }],
+                    },
+                }],
+            },
+        }
+    }
+
+    fn snapshot(entries: &[(&str, &str)]) -> HashMap<String, DashboardPipeline> {
+        entries.iter().map(|(n, s)| (n.to_string(), pipeline(n, s))).collect()
+    }
+
+    #[test]
+    fn new_failures_fires_only_on_favorited_edge_transitions() {
+        let favorites: HashSet<String> = ["a", "b", "c"].iter().map(|s| s.to_string()).collect();
+        let old = snapshot(&[("a", "Passed"), ("b", "Failed"), ("d", "Passed")]);
+        let new = snapshot(&[("a", "Failed"), ("b", "Failed"), ("c", "Failed"), ("d", "Failed")]);
+        // a: Passed->Failed and favorited -> fires. b: already Failed -> no.
+        // c: unknown before (no observed transition) -> no. d: not favorited -> no.
+        assert_eq!(super::new_failures(&old, &new, &favorites), vec!["a".to_string()]);
+    }
+
+    fn run(counter: i64) -> crate::model::PipelineInstance {
+        crate::model::PipelineInstance {
+            name: "p".into(),
+            label: format!("l{counter}"),
+            counter,
+            comment: None,
+            scheduled_date: None,
+            stages: Vec::new(),
+            build_cause: None,
+        }
+    }
+
+    #[test]
+    fn merge_history_pages_keeps_paginated_tail_on_overlap() {
+        // Cached: 61..=46 (paginated). Fresh page one after 3 new runs: 64..=57.
+        let cached: Vec<_> = (46..=61).rev().map(run).collect();
+        let fresh: Vec<_> = (57..=64).rev().map(run).collect();
+        let (merged, kept) = super::merge_history_pages(fresh, cached);
+        assert!(kept);
+        let counters: Vec<i64> = merged.iter().map(|i| i.counter).collect();
+        assert_eq!(counters, (46..=64).rev().collect::<Vec<i64>>());
+    }
+
+    #[test]
+    fn merge_history_pages_resets_on_gap_or_no_pagination() {
+        // Gap: 10 new runs pushed the fresh page entirely above the cached range.
+        let cached: Vec<_> = (54..=61).rev().map(run).collect();
+        let fresh: Vec<_> = (64..=71).rev().map(run).collect();
+        let (merged, kept) = super::merge_history_pages(fresh, cached);
+        assert!(!kept);
+        assert_eq!(merged.first().unwrap().counter, 71);
+        assert_eq!(merged.len(), 8);
+        // Cached no deeper than the fresh page: plain replacement.
+        let (merged, kept) = super::merge_history_pages((54..=61).rev().map(run).collect(), (54..=61).rev().map(run).collect());
+        assert!(!kept);
+        assert_eq!(merged.len(), 8);
+        // Empty cache (first load).
+        let (merged, kept) = super::merge_history_pages(vec![run(1)], Vec::new());
+        assert!(!kept);
+        assert_eq!(merged.len(), 1);
+    }
+
+    #[test]
+    fn new_failures_recovery_then_refailure_fires_again() {
+        let favorites: HashSet<String> = ["a"].iter().map(|s| s.to_string()).collect();
+        let red = snapshot(&[("a", "Failed")]);
+        let green = snapshot(&[("a", "Passed")]);
+        assert!(super::new_failures(&red, &green, &favorites).is_empty());
+        assert_eq!(super::new_failures(&green, &red, &favorites), vec!["a".to_string()]);
     }
 }
