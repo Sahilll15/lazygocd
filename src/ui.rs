@@ -69,6 +69,15 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     }
 }
 
+/// Host only: the full URL never changes mid-session and ate 45 columns.
+fn short_host(url: &str) -> String {
+    let s = url
+        .strip_prefix("https://")
+        .or_else(|| url.strip_prefix("http://"))
+        .unwrap_or(url);
+    s.split('/').next().unwrap_or(s).to_string()
+}
+
 fn draw_header(f: &mut Frame, app: &App, area: Rect) {
     let dot_color = if app.error_line.is_some() {
         theme::DANGER
@@ -89,10 +98,42 @@ fn draw_header(f: &mut Frame, app: &App, area: Rect) {
         Span::raw(" "),
         Span::styled("\u{25cf}", Style::default().fg(dot_color)),
         Span::raw(" "),
-        Span::styled(&app.server_url, Style::default().fg(theme::MUTED)),
+        Span::styled(short_host(&app.server_url), Style::default().fg(theme::MUTED)),
     ];
+
+    if !app.groups.is_empty() {
+        let (paused, building, failed) = app.fleet_counts();
+        spans.push(Span::raw("   "));
+        spans.push(count_span(app.groups.len(), "groups", theme::ACCENT));
+        spans.push(Span::styled(" \u{00b7} ", Style::default().fg(theme::MUTED)));
+        spans.push(count_span(app.pipeline_info.len(), "pipelines", theme::ACCENT));
+        if paused > 0 {
+            spans.push(Span::styled(" \u{00b7} ", Style::default().fg(theme::MUTED)));
+            spans.push(Span::styled(
+                format!("\u{23f8}{paused}"),
+                Style::default().fg(theme::WARNING),
+            ));
+        }
+        if building > 0 {
+            spans.push(Span::styled(" \u{00b7} ", Style::default().fg(theme::MUTED)));
+            spans.push(Span::styled(
+                format!("\u{25d0}{building}"),
+                Style::default().fg(theme::WARNING),
+            ));
+        }
+        if failed > 0 {
+            spans.push(Span::styled(" \u{00b7} ", Style::default().fg(theme::MUTED)));
+            spans.push(Span::styled(
+                format!("\u{25cf}{failed}"),
+                Style::default()
+                    .fg(theme::DANGER)
+                    .add_modifier(Modifier::BOLD),
+            ));
+        }
+    }
+
     if let Some(view) = app.active_view.and_then(|i| app.views.get(i)) {
-        spans.push(Span::raw("  "));
+        spans.push(Span::raw("   "));
         spans.push(Span::styled(
             format!("[{}]", view.name),
             Style::default()
@@ -100,166 +141,104 @@ fn draw_header(f: &mut Frame, app: &App, area: Rect) {
                 .add_modifier(Modifier::BOLD),
         ));
     }
-    if let Some(err) = &app.error_line {
-        spans.push(Span::raw("  "));
-        spans.push(Span::styled(
-            format!("! {err}"),
-            Style::default().fg(theme::DANGER),
-        ));
-    } else if !app.status_line.is_empty() {
-        spans.push(Span::raw("  "));
-        spans.push(Span::styled(
-            &app.status_line,
-            Style::default().fg(theme::SUCCESS),
-        ));
-    }
     f.render_widget(Paragraph::new(Line::from(spans)), area);
 }
 
-/// k9s-style at-a-glance counts: only surfaces non-nominal states (paused/
-/// building/failed) so a healthy fleet doesn't clutter the bar with zeros.
+fn count_span(n: usize, label: &str, color: Color) -> Span<'static> {
+    Span::styled(
+        format!("{n} {label}"),
+        Style::default().fg(color).add_modifier(Modifier::BOLD),
+    )
+}
+
+/// The message row. Errors get the whole width here instead of being appended
+/// to the header and sliced off mid-sentence.
 fn draw_statusbar(f: &mut Frame, app: &App, area: Rect) {
-    if app.groups.is_empty() {
-        return;
-    }
+    let line = if let Some(err) = &app.error_line {
+        Line::from(vec![
+            Span::styled(
+                "\u{25bc} ",
+                Style::default().fg(theme::DANGER).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(err.clone(), Style::default().fg(theme::DANGER)),
+        ])
+    } else if !app.status_line.is_empty() {
+        Line::from(Span::styled(
+            app.status_line.clone(),
+            Style::default().fg(theme::SUCCESS),
+        ))
+    } else {
+        Line::from("")
+    };
+    f.render_widget(Paragraph::new(line), area);
+}
 
-    let mut paused = 0u32;
-    let mut building = 0u32;
-    let mut failed = 0u32;
-    for p in app.pipeline_info.values() {
-        if p.pause_info.paused {
-            paused += 1;
-        }
-        match p.latest_status() {
-            "Building" => building += 1,
-            "Failed" => failed += 1,
-            _ => {}
-        }
-    }
+/// key, label, and whether the key changes server state (rendered red so a
+/// destructive action never hides among navigation keys).
+type Hint = (&'static str, &'static str, bool);
 
+fn footer_hints(pane: &str, pairs: &[Hint]) -> Line<'static> {
     let mut spans = vec![
         Span::styled(
-            app.groups.len().to_string(),
+            format!(" {pane} "),
             Style::default()
-                .fg(theme::ACCENT)
+                .fg(Color::Black)
+                .bg(theme::MUTED)
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::styled(" groups", Style::default().fg(theme::MUTED)),
-        Span::raw("   "),
-        Span::styled(
-            app.pipeline_info.len().to_string(),
-            Style::default()
-                .fg(theme::ACCENT)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(" pipelines", Style::default().fg(theme::MUTED)),
+        Span::raw("  "),
     ];
-    if paused > 0 {
-        spans.push(Span::raw("   "));
-        spans.push(Span::styled(
-            format!("\u{23f8} {paused}"),
-            Style::default().fg(theme::WARNING),
-        ));
-        spans.push(Span::styled(" paused", Style::default().fg(theme::MUTED)));
-    }
-    if building > 0 {
-        spans.push(Span::raw("   "));
-        spans.push(Span::styled(
-            format!("\u{25d0} {building}"),
-            Style::default().fg(theme::WARNING),
-        ));
-        spans.push(Span::styled(" building", Style::default().fg(theme::MUTED)));
-    }
-    if failed > 0 {
-        spans.push(Span::raw("   "));
-        spans.push(Span::styled(
-            format!("\u{25cf} {failed}"),
-            Style::default()
-                .fg(theme::DANGER)
-                .add_modifier(Modifier::BOLD),
-        ));
-        spans.push(Span::styled(" failed", Style::default().fg(theme::MUTED)));
-    }
-    f.render_widget(Paragraph::new(Line::from(spans)), area);
-}
-
-fn footer_hints(pairs: &[(&str, &str)]) -> Line<'static> {
-    let mut spans = Vec::new();
-    for (i, (key, desc)) in pairs.iter().enumerate() {
+    for (i, (key, desc, mutates)) in pairs.iter().enumerate() {
         if i > 0 {
-            spans.push(Span::raw("  "));
+            spans.push(Span::raw("   "));
         }
+        let key_color = if *mutates { theme::DANGER } else { theme::ACCENT };
         spans.push(Span::styled(
             (*key).to_string(),
-            Style::default()
-                .fg(theme::ACCENT)
-                .add_modifier(Modifier::BOLD),
+            Style::default().fg(key_color).add_modifier(Modifier::BOLD),
         ));
+        let desc_color = if *mutates { theme::DANGER } else { theme::MUTED };
         spans.push(Span::styled(
             format!(" {desc}"),
-            Style::default().fg(theme::MUTED),
+            Style::default().fg(desc_color),
         ));
     }
     Line::from(spans)
 }
 
+/// Six hints max so the row survives an 80-column terminal; the full list
+/// lives behind '?'.
 fn draw_footer(f: &mut Frame, app: &App, area: Rect) {
-    const GROUPS_HINTS: &[(&str, &str)] = &[
-        ("j/k", "move"),
-        ("g/G", "top/bottom"),
-        ("enter", "open"),
-        ("h", "collapse"),
-        ("t/T", "trigger/+vars"),
-        ("p", "pause"),
-        ("f", "favorite"),
-        ("y", "copy"),
-        ("/", "filter"),
-        ("v", "views"),
-        ("V", "save view"),
-        ("r", "refresh"),
-        ("A", "gocd"),
-        ("@", "github"),
-        ("?", "help"),
-        ("q", "quit"),
+    const GROUPS_HINTS: &[Hint] = &[
+        ("j/k", "move", false),
+        ("enter", "open", false),
+        ("/", "filter", false),
+        ("t", "trigger", true),
+        ("v", "views", false),
+        ("?", "keys", false),
     ];
-    const HISTORY_HINTS: &[(&str, &str)] = &[
-        ("j/k", "move"),
-        ("g/G", "top/bottom"),
-        ("tab", "detail"),
-        ("esc", "back"),
-        ("t/T", "trigger/+vars"),
-        ("p", "pause"),
-        ("f", "favorite"),
-        ("y", "copy"),
-        ("X", "cancel"),
-        ("R", "rerun failed"),
-        ("o", "commit"),
-        ("r", "refresh"),
-        ("?", "help"),
-        ("q", "quit"),
+    const HISTORY_HINTS: &[Hint] = &[
+        ("j/k", "move", false),
+        ("tab", "jobs", false),
+        ("o", "commit", false),
+        ("R", "rerun", true),
+        ("X", "cancel", true),
+        ("?", "keys", false),
     ];
-    const DETAIL_HINTS: &[(&str, &str)] = &[
-        ("j/k", "move"),
-        ("g/G", "top/bottom"),
-        ("enter", "console log"),
-        ("tab", "groups"),
-        ("esc", "back"),
-        ("t/T", "trigger/+vars"),
-        ("p", "pause"),
-        ("y", "copy"),
-        ("X", "cancel"),
-        ("R", "rerun failed"),
-        ("o", "commit"),
-        ("r", "refresh"),
-        ("?", "help"),
-        ("q", "quit"),
+    const DETAIL_HINTS: &[Hint] = &[
+        ("j/k", "move", false),
+        ("enter", "console", false),
+        ("esc", "back", false),
+        ("R", "rerun", true),
+        ("X", "cancel", true),
+        ("?", "keys", false),
     ];
-    let hints = match app.focus {
-        Focus::Groups => GROUPS_HINTS,
-        Focus::History => HISTORY_HINTS,
-        Focus::Detail => DETAIL_HINTS,
+    let (pane, hints) = match app.focus {
+        Focus::Groups => ("groups", GROUPS_HINTS),
+        Focus::History => ("history", HISTORY_HINTS),
+        Focus::Detail => ("jobs", DETAIL_HINTS),
     };
-    f.render_widget(Paragraph::new(footer_hints(hints)), area);
+    f.render_widget(Paragraph::new(footer_hints(pane, hints)), area);
 }
 
 fn draw_body(f: &mut Frame, app: &mut App, area: Rect) {
@@ -783,77 +762,150 @@ fn draw_filter_box(f: &mut Frame, app: &App, area: Rect) {
     );
 }
 
+/// Grouped into four task blocks across two columns. The old single column ran
+/// 35 lines and overflowed its own box.
 fn draw_help(f: &mut Frame, area: Rect) {
-    let rect = centered_rect(70, 85, area);
-    f.render_widget(Clear, rect);
-    let text = vec![
-        Line::from(Span::styled(
-            "lazygocd keybindings",
-            Style::default().add_modifier(Modifier::BOLD),
-        )),
-        Line::from(""),
-        Line::from("j/k, \u{2193}/\u{2191}     move selection"),
-        Line::from("g/G          jump to top / bottom of the focused list"),
-        Line::from("ctrl-d/u     half-page down / up (also pgdn/pgup)"),
-        Line::from("l/enter/\u{2192}    expand group / open pipeline history / open console log"),
-        Line::from("h/\u{2190}          collapse group"),
-        Line::from("tab          cycle focus: groups -> history -> details -> groups"),
-        Line::from("esc          back: details -> history -> groups; in groups, clear filter"),
-        Line::from("t            trigger selected pipeline"),
-        Line::from("T            trigger with environment variables (NAME=VALUE entries)"),
-        Line::from("p            pause/unpause selected pipeline"),
-        Line::from("f            star/unstar selected pipeline as a favorite"),
-        Line::from("o            open the run's commit on GitHub (or the pending diff)"),
-        Line::from("y            copy commit sha / pipeline name to the clipboard"),
-        Line::from("X            cancel the currently running stage"),
-        Line::from(
-            "R            rerun failed jobs of a failed stage ('a' in the confirm = whole stage)",
-        ),
-        Line::from("/            fuzzy-filter pipelines by name"),
-        Line::from("r            refresh"),
-        Line::from("A            connect / reconnect GoCD"),
-        Line::from("@            connect GitHub (optional, for private-repo checks)"),
-        Line::from("?            toggle this help"),
-        Line::from("q / ctrl-c   quit"),
-        Line::from(""),
-        Line::from(Span::styled("mouse:", Style::default().fg(theme::MUTED))),
-        Line::from("click        focus pane / select row; click a selected row to open it"),
-        Line::from("wheel        scroll the pane under the cursor (or the console log)"),
-        Line::from(""),
-        Line::from(Span::styled(
-            "in the history pane:",
-            Style::default().fg(theme::MUTED),
-        )),
-        Line::from("             older runs load automatically when you reach the bottom row"),
-        Line::from(Span::styled(
-            "in the details pane:",
-            Style::default().fg(theme::MUTED),
-        )),
-        Line::from("enter        open the selected job's console log"),
-        Line::from(Span::styled(
-            "in the console log view:",
-            Style::default().fg(theme::MUTED),
-        )),
-        Line::from("tab/1-3      switch Console / Artifacts / Materials tabs"),
-        Line::from("/            search the log, n/N next/prev match"),
-        Line::from("j/k          scroll   g/G top/bottom   r refresh   q/esc close"),
-        Line::from(""),
-        Line::from(Span::styled(
-            "press any key to close",
-            Style::default().fg(theme::MUTED),
-        )),
+    const MOVE: &[Hint] = &[
+        ("j/k \u{2193}\u{2191}", "row", false),
+        ("g/G", "top / bottom", false),
+        ("ctrl-d/u", "half page", false),
+        ("tab", "next pane", false),
+        ("enter", "open", false),
+        ("h/esc", "collapse / back", false),
+        ("/", "filter pipelines", false),
     ];
-    let block = styled_block("Help", theme::ACCENT);
+    const JOB: &[Hint] = &[
+        ("1 2 3", "console/art/mat", false),
+        ("tab", "cycle tabs", false),
+        ("/", "search log", false),
+        ("n/N", "next / prev hit", false),
+        ("g/G", "top / bottom", false),
+        ("y", "copy artifact url", false),
+        ("q/esc", "close", false),
+    ];
+    const MUTATE: &[Hint] = &[
+        ("t", "trigger", true),
+        ("T", "trigger + vars", true),
+        ("R", "rerun failed", true),
+        ("X", "cancel stage", true),
+        ("p", "pause / unpause", true),
+        ("V", "save view", true),
+    ];
+    const SERVER: &[Hint] = &[
+        ("A", "reconnect GoCD", false),
+        ("@", "GitHub token", false),
+        ("v", "switch view", false),
+        ("r", "refresh", false),
+        ("f", "favorite", false),
+        ("y", "copy sha / name", false),
+        ("o", "open commit", false),
+    ];
+
+    let rect = centered_rect(72, 62, area);
+    f.render_widget(Clear, rect);
+
+    let mut text = vec![
+        help_headings("MOVE", theme::ACCENT, "JOB & LOGS", theme::ACCENT),
+    ];
+    for i in 0..MOVE.len().max(JOB.len()) {
+        text.push(help_row(MOVE.get(i), JOB.get(i)));
+    }
+    text.push(Line::from(""));
+    text.push(help_headings("CHANGES THINGS", theme::DANGER, "SERVER & VIEW", theme::ACCENT));
+    for i in 0..MUTATE.len().max(SERVER.len()) {
+        text.push(help_row(MUTATE.get(i), SERVER.get(i)));
+    }
+    text.push(Line::from(""));
+    text.push(Line::from(vec![
+        Span::styled("  \u{25cf} ", Style::default().fg(theme::DANGER)),
+        Span::styled("failed   ", Style::default().fg(theme::MUTED)),
+        Span::styled("\u{25d0} ", Style::default().fg(theme::WARNING)),
+        Span::styled("building   ", Style::default().fg(theme::MUTED)),
+        Span::styled("\u{25cf} ", Style::default().fg(theme::SUCCESS)),
+        Span::styled("passed   ", Style::default().fg(theme::MUTED)),
+        Span::styled("\u{23f8} ", Style::default().fg(theme::WARNING)),
+        Span::styled("paused   ", Style::default().fg(theme::MUTED)),
+        Span::styled("\u{2605} ", Style::default().fg(theme::FAVORITE)),
+        Span::styled("favorite", Style::default().fg(theme::MUTED)),
+    ]));
+    text.push(Line::from(Span::styled(
+        "  mouse: click focuses a pane, wheel scrolls it. q/ctrl-c quits.",
+        Style::default().fg(theme::MUTED),
+    )));
+    text.push(Line::from(Span::styled(
+        "  any key closes this",
+        Style::default().fg(theme::MUTED),
+    )));
+
+    let block = styled_block("Keys", theme::ACCENT);
     f.render_widget(Paragraph::new(text).block(block), rect);
+}
+
+const HELP_KEY_W: usize = 9;
+const HELP_DESC_W: usize = 19;
+
+fn help_headings(left: &str, lc: Color, right: &str, rc: Color) -> Line<'static> {
+    Line::from(vec![
+        Span::raw("  "),
+        Span::styled(
+            format!("{:<width$}", left, width = HELP_KEY_W + HELP_DESC_W),
+            Style::default().fg(lc).add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(
+            right.to_string(),
+            Style::default().fg(rc).add_modifier(Modifier::BOLD),
+        ),
+    ])
+}
+
+fn help_row(left: Option<&Hint>, right: Option<&Hint>) -> Line<'static> {
+    let mut spans = vec![Span::raw("  ")];
+    for (idx, cell) in [left, right].iter().enumerate() {
+        match cell {
+            Some((key, desc, mutates)) => {
+                let color = if *mutates { theme::DANGER } else { theme::ACCENT };
+                spans.push(Span::styled(
+                    format!("{:<width$}", key, width = HELP_KEY_W),
+                    Style::default().fg(color).add_modifier(Modifier::BOLD),
+                ));
+                // Last column stays unpadded so trailing blanks don't widen the box.
+                let text = if idx == 1 {
+                    (*desc).to_string()
+                } else {
+                    format!("{:<width$}", desc, width = HELP_DESC_W)
+                };
+                spans.push(Span::styled(text, Style::default().fg(theme::MUTED)));
+            }
+            None if idx == 0 => spans.push(Span::raw(" ".repeat(HELP_KEY_W + HELP_DESC_W))),
+            None => {}
+        }
+    }
+    Line::from(spans)
 }
 
 fn draw_confirm(f: &mut Frame, area: Rect, message: &str) {
     let rect = centered_rect(50, 20, area);
     f.render_widget(Clear, rect);
     let block = styled_block("Confirm", theme::WARNING);
-    // Multi-line messages (e.g. the rerun modal's 'a' option) split into Lines;
-    // a \n inside a single Line renders literally.
-    let mut text: Vec<Line> = message.lines().map(|l| Line::from(l.to_string())).collect();
+    // Multi-line messages split into Lines; a \n inside a single Line renders
+    // literally. Line one is the target (pipeline and run), emphasised so you
+    // always see what you are about to act on before the verb.
+    let mut text: Vec<Line> = message
+        .lines()
+        .enumerate()
+        .map(|(i, l)| {
+            if i == 0 {
+                Line::from(Span::styled(
+                    l.to_string(),
+                    Style::default()
+                        .fg(theme::ACCENT)
+                        .add_modifier(Modifier::BOLD),
+                ))
+            } else {
+                Line::from(l.to_string())
+            }
+        })
+        .collect();
     text.push(Line::from(""));
     text.push(Line::from(Span::styled(
         "y/enter confirm   n/esc cancel",

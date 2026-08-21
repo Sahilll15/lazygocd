@@ -436,6 +436,13 @@ impl GoCdClient {
     }
 }
 
+/// Error bodies are normally GoCD JSON, but a proxy or load balancer in front of
+/// it answers with an HTML page. Echoing that markup into a one-line status bar
+/// is noise, so collapse it to something a person can act on.
 fn truncate(s: &str) -> String {
-    s.chars().take(300).collect()
+    let t = s.trim();
+    if t.starts_with('<') || t.to_ascii_lowercase().contains("<html") {
+        return "a proxy or gateway answered instead of GoCD".to_string();
+    }
+    t.chars().take(300).collect()
 }

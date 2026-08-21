@@ -1,5 +1,28 @@
 # Changelog
 
+## v0.5.0
+
+Interface pass. The tool had grown from six keybindings to fourteen without
+the layout being revisited.
+
+- Footer shows only what the focused pane can do (six hints, labelled with the
+  pane) instead of fourteen hints that ran off the edge of the screen. Keys
+  that change server state render red so a destructive action never hides
+  among navigation keys.
+- Header is one line: host only instead of the full URL, with the fleet counts
+  promoted into it. The row below is now dedicated to status and errors, so a
+  message gets the full width instead of being appended to the header and cut
+  off mid-sentence.
+- `?` help is grouped into four task blocks across two columns (16 lines,
+  down from 35) with a legend for the status glyphs, which were previously
+  undocumented.
+- Confirm dialogs lead with the target (pipeline name and run number) on its
+  own emphasised line, then the action.
+- Views: pressing `v` after a failed fetch now reports the failure instead of
+  claiming the server has no views. `g`/`G` jump to the ends of the picker.
+- Error text no longer echoes raw HTML when a proxy or gateway answers instead
+  of GoCD, and 403 / timeout errors suggest a likely cause.
+
 ## Unreleased
 
 - Snyk CI integration added: generates a CycloneDX SBOM for Cargo
