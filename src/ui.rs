@@ -783,9 +783,15 @@ fn console_line<'a>(raw: &'a str, query: Option<&str>, current_match: bool) -> L
         ("", raw)
     };
 
-    // "HH:MM:SS.mmm " timestamp prefix, rendered muted.
-    let (ts, body) = if rest.len() >= 13 && rest.as_bytes().get(2) == Some(&b':') && rest.as_bytes().get(5) == Some(&b':') {
-        rest.split_at(13.min(rest.len()))
+    // "HH:MM:SS.mmm " timestamp prefix, rendered muted. Byte 13 must be a char
+    // boundary: a timestamp is pure ASCII, so a multibyte char there means the
+    // sniff was a false positive (e.g. "12:34:56 \u{65e5}\u{672c}...") - skip splitting.
+    let (ts, body) = if rest.len() >= 13
+        && rest.as_bytes().get(2) == Some(&b':')
+        && rest.as_bytes().get(5) == Some(&b':')
+        && rest.is_char_boundary(13)
+    {
+        rest.split_at(13)
     } else {
         ("", rest)
     };
@@ -794,12 +800,8 @@ fn console_line<'a>(raw: &'a str, query: Option<&str>, current_match: bool) -> L
     let mut spans = vec![Span::styled(ts, Style::default().fg(theme::MUTED))];
 
     if let Some(q) = query {
-        // Highlight case-insensitive matches within the body.
-        let lower = body.to_lowercase();
         let mut pos = 0;
-        while let Some(hit) = lower[pos..].find(q) {
-            let start = pos + hit;
-            let end = start + q.len();
+        for (start, end) in find_matches_ci(body, q) {
             spans.push(Span::styled(&body[pos..start], body_style));
             let hl = if current_match {
                 Style::default().fg(Color::Black).bg(theme::WARNING).add_modifier(Modifier::BOLD)
@@ -814,6 +816,49 @@ fn console_line<'a>(raw: &'a str, query: Option<&str>, current_match: bool) -> L
         spans.push(Span::styled(body, body_style));
     }
     Line::from(spans)
+}
+
+/// Case-insensitive, non-overlapping matches of `query` in `haystack`, as byte
+/// ranges that are always valid char boundaries of the ORIGINAL string. Never
+/// indexes via to_lowercase(), whose byte offsets can drift (e.g. '\u{130}').
+fn find_matches_ci(haystack: &str, query: &str) -> Vec<(usize, usize)> {
+    let q: Vec<char> = query.chars().flat_map(char::to_lowercase).collect();
+    if q.is_empty() {
+        return Vec::new();
+    }
+    let mut out = Vec::new();
+    let mut iter = haystack.char_indices().peekable();
+    while let Some(&(start, _)) = iter.peek() {
+        let mut probe = iter.clone();
+        let mut qi = 0;
+        let mut end = start;
+        while qi < q.len() {
+            let Some((i, c)) = probe.next() else { break };
+            let mut ok = true;
+            for lc in c.to_lowercase() {
+                if qi >= q.len() || q[qi] != lc {
+                    ok = false;
+                    break;
+                }
+                qi += 1;
+            }
+            if !ok {
+                qi = usize::MAX;
+                break;
+            }
+            end = i + c.len_utf8();
+        }
+        if qi == q.len() {
+            out.push((start, end));
+            // Skip past the match so highlights don't overlap.
+            while iter.peek().is_some_and(|&(i, _)| i < end) {
+                iter.next();
+            }
+        } else {
+            iter.next();
+        }
+    }
+    out
 }
 
 fn console_body_style(marker: &str, body: &str) -> Style {
@@ -986,4 +1031,39 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
         Constraint::Percentage((100 - percent_x) / 2),
     ])
     .split(vertical[1])[1]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // P0 regression: byte 13 lands inside a multibyte char after a false-positive
+    // timestamp sniff; must render, not panic.
+    #[test]
+    fn console_line_multibyte_after_timestamp_sniff() {
+        let _ = console_line("12:34:56 \u{65e5}\u{672c}\u{8a9e}\u{30c6}\u{30b9}\u{30c8} more text", None, false);
+        let _ = console_line("##|10:00:00.000 caf\u{e9} ok", None, false);
+    }
+
+    // P0 regression: to_lowercase changes byte length for U+0130; highlight ranges
+    // must stay valid boundaries of the original string.
+    #[test]
+    fn find_matches_ci_lowercase_length_drift() {
+        let body = "\u{130}\u{130}\u{130}\u{130}\u{130}error";
+        let ranges = find_matches_ci(body, "e");
+        assert!(!ranges.is_empty());
+        for (a, b) in ranges {
+            assert!(body.is_char_boundary(a) && body.is_char_boundary(b));
+            let _ = &body[a..b];
+        }
+        let _ = console_line(body, Some("e"), true);
+        let _ = console_line(body, Some("\u{130}"), false);
+    }
+
+    #[test]
+    fn find_matches_ci_basic() {
+        assert_eq!(find_matches_ci("Error and ERROR", "error"), vec![(0, 5), (10, 15)]);
+        assert!(find_matches_ci("abc", "").is_empty());
+        assert!(find_matches_ci("abc", "zz").is_empty());
+    }
 }

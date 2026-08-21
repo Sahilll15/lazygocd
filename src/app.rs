@@ -187,7 +187,7 @@ enum SelectionKey {
 }
 
 pub enum ApiEvent {
-    Dashboard(Result<(Vec<DashboardGroup>, Vec<DashboardPipeline>), String>),
+    Dashboard(u64, Result<(Vec<DashboardGroup>, Vec<DashboardPipeline>), String>),
     History(String, Result<Vec<PipelineInstance>, String>),
     ActionDone(PendingAction, Result<String, String>),
     GithubLatest(String, Result<String, String>),
@@ -249,6 +249,10 @@ pub struct App {
     pub github: GitHubClient,
     pub github_ref: Option<GitRef>,
     pub github_state: GithubState,
+
+    /// Bumped on reconnect; in-flight responses from a previous server are
+    /// dropped when their generation doesn't match.
+    pub server_gen: u64,
 
     pub loading_groups: bool,
     pub status_line: String,
@@ -368,6 +372,7 @@ impl App {
             github,
             github_ref: None,
             github_state: GithubState::Idle,
+            server_gen: 0,
             loading_groups: !needs_setup && !has_cache,
             status_line,
             error_line: None,
@@ -389,12 +394,13 @@ impl App {
     fn spawn_load_dashboard(&self) {
         let client = self.client.clone();
         let tx = self.tx.clone();
+        let generation = self.server_gen;
         thread::spawn(move || {
             let result = client
                 .fetch_dashboard()
                 .map(|d| (d.pipeline_groups, d.pipelines))
                 .map_err(|e| format!("{e:#}"));
-            let _ = tx.send(ApiEvent::Dashboard(result));
+            let _ = tx.send(ApiEvent::Dashboard(generation, result));
         });
     }
 
@@ -462,7 +468,10 @@ impl App {
 
     pub fn handle_api_event(&mut self, ev: ApiEvent) {
         match ev {
-            ApiEvent::Dashboard(Ok((groups, pipelines))) => {
+            ApiEvent::Dashboard(generation, _) if generation != self.server_gen => {
+                // Stale response from before a reconnect - a different server's data.
+            }
+            ApiEvent::Dashboard(_, Ok((groups, pipelines))) => {
                 self.status_line = format!("Loaded {} group(s), {} pipeline(s)", groups.len(), pipelines.len());
                 // A successful load means connectivity is back: drop any stale network
                 // error banner instead of leaving it until the next keypress.
@@ -477,7 +486,7 @@ impl App {
                 self.rebuild_rows();
                 self.restore_selection(key);
             }
-            ApiEvent::Dashboard(Err(e)) => {
+            ApiEvent::Dashboard(_, Err(e)) => {
                 self.loading_groups = false;
                 self.error_line = Some(format!("Failed to load dashboard: {e}{}", auth_hint(&e)));
             }
@@ -506,10 +515,12 @@ impl App {
                 }
             }
             ApiEvent::History(name, Err(e)) => {
+                // Only surface failures for the pipeline actually open - a failed
+                // hover-prefetch of something merely pointed at is not news.
                 if self.selected_pipeline.as_deref() == Some(name.as_str()) {
                     self.history_loading = false;
+                    self.error_line = Some(format!("Failed to load history for {name}: {e}{}", auth_hint(&e)));
                 }
-                self.error_line = Some(format!("Failed to load history for {name}: {e}{}", auth_hint(&e)));
             }
             ApiEvent::ActionDone(action, Ok(msg)) => {
                 self.status_line = msg;
@@ -583,6 +594,11 @@ impl App {
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) {
+        // Global escape hatch: must work even while a text input is capturing chars.
+        if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
+            self.should_quit = true;
+            return;
+        }
         self.error_line = None;
 
         if let Some(modal) = self.modal.clone() {
@@ -739,12 +755,19 @@ impl App {
                 self.modal = Some(Modal::ConsoleLog(Box::new(state)));
                 return;
             }
-            KeyCode::Char('1') => state.tab = JobTab::Console,
-            KeyCode::Char('2') => {
+            KeyCode::Char('1') if state.tab != JobTab::Console => {
+                state.tab = JobTab::Console;
+                state.scroll = 0;
+            }
+            KeyCode::Char('2') if state.tab != JobTab::Artifacts => {
                 state.tab = JobTab::Artifacts;
+                state.scroll = 0;
                 self.ensure_artifacts(&mut state);
             }
-            KeyCode::Char('3') => state.tab = JobTab::Materials,
+            KeyCode::Char('3') if state.tab != JobTab::Materials => {
+                state.tab = JobTab::Materials;
+                state.scroll = 0;
+            }
             _ => {}
         }
 
@@ -939,6 +962,7 @@ impl App {
                     self.error_line = Some(format!("Reconnected, but failed to save config: {e}"));
                 }
                 self.status_line = "Reconnecting...".to_string();
+                self.server_gen += 1;
                 self.groups.clear();
                 self.pipeline_info.clear();
                 self.rows.clear();
@@ -946,6 +970,13 @@ impl App {
                 self.selected_pipeline = None;
                 self.history.clear();
                 self.history_selected = 0;
+                self.history_cache.clear();
+                self.expanded.clear();
+                self.hover_target = None;
+                self.detail_rows.clear();
+                self.detail_selected = 0;
+                self.github_ref = None;
+                self.github_state = GithubState::Idle;
                 self.loading_groups = true;
                 self.spawn_load_dashboard();
             }
@@ -1035,18 +1066,21 @@ impl App {
     }
 
     fn update_hover_target(&mut self) {
-        match self.rows.get(self.selected) {
+        let name = match self.rows.get(self.selected) {
             Some(Row::Pipeline { group_idx, pipeline_idx }) => {
-                let Some(name) = self.groups.get(*group_idx).and_then(|g| g.pipelines.get(*pipeline_idx)) else {
-                    self.hover_target = None;
-                    return;
-                };
-                let already_hovering = self.hover_target.as_ref().is_some_and(|(n, _)| n == name);
+                self.groups.get(*group_idx).and_then(|g| g.pipelines.get(*pipeline_idx)).cloned()
+            }
+            Some(Row::FavoritePipeline(name)) => Some(name.clone()),
+            _ => None,
+        };
+        match name {
+            Some(name) => {
+                let already_hovering = self.hover_target.as_ref().is_some_and(|(n, _)| *n == name);
                 if !already_hovering {
-                    self.hover_target = Some((name.clone(), Instant::now()));
+                    self.hover_target = Some((name, Instant::now()));
                 }
             }
-            _ => self.hover_target = None,
+            None => self.hover_target = None,
         }
     }
 
@@ -1474,7 +1508,8 @@ impl App {
                 for m in &mr.modifications {
                     let sha = m.revision.as_deref().unwrap_or("-");
                     let who = m.user_name.as_deref().unwrap_or("-");
-                    materials.push(format!("  {} by {}", &sha[..sha.len().min(12)], who));
+                    let short: String = sha.chars().take(12).collect();
+                    materials.push(format!("  {short} by {who}"));
                     if let Some(c) = &m.comment {
                         for line in c.lines().take(3) {
                             materials.push(format!("    {line}"));
@@ -1617,7 +1652,11 @@ impl App {
 /// Following mode parks scroll at usize::MAX; pin it back to the real bottom
 /// before scrolling up, or the subtraction never becomes visible.
 fn console_scroll_up(state: &mut ConsoleLogState, view_height: u16, lines: usize) {
-    let max = state.lines.len().saturating_sub(view_height as usize);
+    let content_len = match state.tab {
+        JobTab::Materials => state.materials.len(),
+        _ => state.lines.len(),
+    };
+    let max = content_len.saturating_sub(view_height as usize);
     state.scroll = state.scroll.min(max).saturating_sub(lines);
     state.following = false;
 }
