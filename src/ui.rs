@@ -394,7 +394,7 @@ fn draw_history(f: &mut Frame, app: &mut App, area: Rect) {
                 .unwrap_or_default();
             let when = inst.scheduled_date.map(format_ts).unwrap_or_default();
             TableRow::new(vec![
-                Cell::from(format!("#{}", inst.label)),
+                Cell::from(format!("#{} {}", inst.counter, inst.label)),
                 Cell::from(when),
                 Cell::from(Span::styled(status, Style::default().fg(status_color(status)))),
                 Cell::from(cause),
@@ -402,7 +402,7 @@ fn draw_history(f: &mut Frame, app: &mut App, area: Rect) {
         })
         .collect();
 
-    let widths = [Constraint::Length(10), Constraint::Length(20), Constraint::Length(12), Constraint::Min(10)];
+    let widths = [Constraint::Length(15), Constraint::Length(20), Constraint::Length(12), Constraint::Min(10)];
     let table = Table::new(rows, widths)
         .header(
             TableRow::new(vec!["Run", "When", "Status", "Trigger"])
@@ -426,7 +426,7 @@ fn draw_detail(f: &mut Frame, app: &App, area: Rect) {
     };
 
     let mut lines: Vec<Line> = Vec::new();
-    lines.push(Line::from(vec![label("Run "), Span::raw(format!("#{}", inst.label))]));
+    lines.push(Line::from(vec![label("Run "), Span::raw(format!("#{} {}", inst.counter, inst.label))]));
     if let Some(ts) = inst.scheduled_date {
         lines.push(Line::from(vec![label("Started: "), Span::raw(format_ts(ts))]));
     }
