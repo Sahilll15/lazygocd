@@ -67,6 +67,13 @@ cargo build --release
 
 ## Getting started
 
+Run `lazygocd` (`--help` for flags; `--config-dir` overrides the config location, and `$XDG_CONFIG_HOME` is respected). Shell completions and a man page ship built in:
+
+```sh
+lazygocd completions zsh > ~/.zfunc/_lazygocd
+lazygocd man > /usr/local/share/man/man1/lazygocd.1
+```
+
 Run `lazygocd`. On first launch it walks you through connecting inside the TUI itself: server URL (e.g. `https://gocd.example.com/go`), then username/password or a personal access token (recommended), then a TLS choice. The config is saved to `~/.config/lazygocd/config.toml` (mode `0600`) and you land straight in the dashboard. Press `A` anytime to reconnect or switch servers.
 
 Env vars override the config for scripting: `GOCD_URL`, `GOCD_USERNAME`, `GOCD_PASSWORD`, `GOCD_TOKEN`, `GOCD_INSECURE=1`, `GITHUB_TOKEN`.
@@ -85,6 +92,7 @@ Env vars override the config for scripting: `GOCD_URL`, `GOCD_USERNAME`, `GOCD_P
 | `t` | trigger a new run (confirm) |
 | `p` | pause/unpause (confirm) |
 | `f` | star/unstar as favorite |
+| `y` | copy: commit SHA (history/details), pipeline/group name (tree), artifact URL (job view) |
 | `X` | cancel the currently running stage (confirm) |
 | `o` | open the selected run's commit on GitHub (or the pending diff when the deploy is behind) |
 | `/` | fuzzy-filter pipelines |
@@ -117,6 +125,7 @@ The dashboard cache lives at `~/.config/lazygocd/dashboard_cache.json` and favor
 - The whole dashboard (groups, pipelines, pause state, latest-run status) loads in **one gzip'd request** — measured at ~2s for a large / 2,389-pipeline production instance
 - The last successful load is cached to disk, so every launch after the first renders **immediately** while a refresh runs behind it
 - Opening a pipeline you've viewed before is instant (in-memory cache), and resting the cursor on a row for 300ms **prefetches** its history
+- Steady-state polls cost almost nothing: the dashboard revalidates with **ETag/304**, and console tailing fetches **only new lines** (`startLineNumber`)
 - The render loop only draws when something changed — **~0% CPU** while idle
 - A dead route (VPN drop) fails in seconds, not minutes, and never blocks the UI
 
