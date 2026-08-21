@@ -289,6 +289,9 @@ pub struct App {
     /// it and filters the whole tree.
     pub views: Vec<ViewFilter>,
     pub active_view: Option<usize>,
+    /// Set when the views fetch failed. Absence of views and failure to load
+    /// them are different states and must never share a message.
+    pub views_error: Option<String>,
 
     /// Starred pipeline names, pinned to a section at the top of the tree.
     pub favorites: HashSet<String>,
@@ -461,6 +464,7 @@ impl App {
             pipeline_info,
             views: Vec::new(),
             active_view: None,
+            views_error: None,
             favorites: load_favorites(),
             favorites_expanded: true,
             filter: String::new(),
@@ -736,12 +740,18 @@ impl App {
                 }
             }
             ApiEvent::Views(generation, result) => {
-                if generation == self.server_gen
-                    && let Ok(mut filters) = result
-                {
-                    // Default is GoCD's implicit everything-view; the picker has "All" for that.
-                    filters.retain(|f| f.name != "Default");
-                    self.views = filters;
+                if generation == self.server_gen {
+                    match result {
+                        Ok(mut filters) => {
+                            // Default is GoCD's implicit everything-view; the picker has "All".
+                            filters.retain(|f| f.name != "Default");
+                            self.views = filters;
+                            self.views_error = None;
+                        }
+                        // Stays quiet until the user presses 'v'; a background
+                        // fetch failing shouldn't interrupt anything.
+                        Err(e) => self.views_error = Some(e),
+                    }
                 }
             }
             ApiEvent::Dashboard(_, Ok(Some((groups, pipelines, etag)))) => {
@@ -1040,7 +1050,9 @@ impl App {
                 }
             }
             KeyCode::Char('v') => {
-                if self.views.is_empty() {
+                if let Some(e) = self.views_error.clone().filter(|_| self.views.is_empty()) {
+                    self.error_line = Some(format!("Could not load views: {e}"));
+                } else if self.views.is_empty() {
                     self.status_line =
                         "No personalized views on this server (create them in the GoCD dashboard)"
                             .to_string();
@@ -1514,6 +1526,7 @@ impl App {
                 self.dashboard_etag = None;
                 self.views.clear();
                 self.active_view = None;
+                self.views_error = None;
                 self.groups.clear();
                 self.pipeline_info.clear();
                 self.rows.clear();
@@ -1833,9 +1846,9 @@ impl App {
         if let Some(name) = self.current_row_pipeline_name() {
             let action = make(name.clone());
             let message = match &action {
-                PendingAction::Trigger(_) => format!("Trigger a new run of '{name}'?"),
-                PendingAction::Pause(_) => format!("Pause '{name}'?"),
-                PendingAction::Unpause(_) => format!("Unpause '{name}'?"),
+                PendingAction::Trigger(_) => format!("{name}\nTrigger a new run?"),
+                PendingAction::Pause(_) => format!("{name}\nPause this pipeline?"),
+                PendingAction::Unpause(_) => format!("{name}\nUnpause this pipeline?"),
                 // request_action is only ever called with Trigger; the other actions
                 // go through their own request_* fns, which build their own messages.
                 _ => unreachable!(),
@@ -1896,7 +1909,7 @@ impl App {
         };
         let stage_name = stage.name.clone();
         let message = format!(
-            "Rerun failed jobs of stage '{stage_name}' on '{pipeline}' run #{}?\n('a' reruns the whole stage instead)",
+            "{pipeline}  run #{}\nRerun the failed jobs of stage '{stage_name}'?\n('a' reruns the whole stage instead)",
             inst.counter
         );
         let action = PendingAction::RerunFailedJobs {
@@ -1921,9 +1934,9 @@ impl App {
                 PendingAction::Pause(name.clone())
             };
             let message = if paused {
-                format!("Unpause '{name}'?")
+                format!("{name}\nUnpause this pipeline?")
             } else {
-                format!("Pause '{name}'?")
+                format!("{name}\nPause this pipeline?")
             };
             self.modal = Some(Modal::Confirm { action, message });
         }
@@ -1955,7 +1968,10 @@ impl App {
             stage: stage_name.clone(),
             stage_counter,
         };
-        let message = format!("Cancel the running '{stage_name}' stage of '{pipeline}'?");
+        let message = format!(
+            "{pipeline}  run #{}\nCancel the running '{stage_name}' stage?",
+            inst.counter
+        );
         self.modal = Some(Modal::Confirm { action, message });
     }
 
@@ -2407,6 +2423,8 @@ impl App {
             }
             KeyCode::Up | KeyCode::Char('k') => selected = selected.saturating_sub(1),
             KeyCode::Down | KeyCode::Char('j') => selected = (selected + 1).min(count - 1),
+            KeyCode::Char('g') | KeyCode::Home => selected = 0,
+            KeyCode::Char('G') | KeyCode::End => selected = count - 1,
             KeyCode::Enter => {
                 self.active_view = (selected > 0).then(|| selected - 1);
                 self.modal = None;
@@ -2425,6 +2443,24 @@ impl App {
             _ => {}
         }
         self.modal = Some(Modal::ViewPicker { selected });
+    }
+
+    /// (paused, building, failed) across the whole fleet, for the header counts.
+    pub fn fleet_counts(&self) -> (u32, u32, u32) {
+        let mut paused = 0;
+        let mut building = 0;
+        let mut failed = 0;
+        for p in self.pipeline_info.values() {
+            if p.pause_info.paused {
+                paused += 1;
+            }
+            match p.latest_status() {
+                "Building" => building += 1,
+                "Failed" => failed += 1,
+                _ => {}
+            }
+        }
+        (paused, building, failed)
     }
 
     pub fn rebuild_rows(&mut self) {
@@ -2612,6 +2648,10 @@ fn open_url(url: &str) -> std::io::Result<()> {
 fn auth_hint(e: &str) -> &'static str {
     if e.contains("401") {
         "  (press A to reconnect)"
+    } else if e.contains("403") {
+        "  (VPN down, or the token lost access? A reconnects)"
+    } else if e.contains("timed out") || e.contains("connect") {
+        "  (server unreachable; r retries)"
     } else {
         ""
     }
