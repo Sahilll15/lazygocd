@@ -304,3 +304,32 @@ impl PipelineInstance {
         rollup_status(self.stages.iter().map(|s| s.status.as_deref()))
     }
 }
+
+/// One entry from the /files/:pipeline/:counter/:stage/:counter/:job.json
+/// artifact listing (recursive folder tree).
+#[derive(Debug, Clone, Deserialize)]
+pub struct ArtifactNode {
+    pub name: String,
+    #[serde(default)]
+    pub url: Option<String>,
+    #[serde(rename = "type", default)]
+    pub kind: Option<String>,
+    #[serde(default)]
+    pub files: Vec<ArtifactNode>,
+}
+
+/// Flattened artifact row for list rendering: (indent depth, name, is_folder, url).
+pub type ArtifactRow = (usize, String, bool, Option<String>);
+
+pub fn flatten_artifacts(nodes: &[ArtifactNode]) -> Vec<ArtifactRow> {
+    fn walk(nodes: &[ArtifactNode], depth: usize, out: &mut Vec<ArtifactRow>) {
+        for n in nodes {
+            let folder = n.kind.as_deref() == Some("folder");
+            out.push((depth, n.name.clone(), folder, n.url.clone()));
+            walk(&n.files, depth + 1, out);
+        }
+    }
+    let mut out = Vec::new();
+    walk(nodes, 0, &mut out);
+    out
+}

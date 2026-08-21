@@ -26,7 +26,7 @@ GoCD's web dashboard gets slow and clicky on large installations. lazygocd loads
 
 - **Three-pane layout** — pipeline groups tree, run history, and stage/job details, `tab`/`esc` to move between them, full mouse support
 - **Act on pipelines** — trigger runs (`t`), pause/unpause (`p`), cancel a running stage (`X`), all with confirmation
-- **Live console logs** — open any job's log, auto-tail while it runs, scroll freely, `r` to refresh
+- **Live console logs** — auto-tail while the job runs, `/` search, and severity coloring (failures red, warnings yellow, successes green, agent chatter dimmed) so long logs actually scan
 - **Fuzzy filter** — `/` then a few characters (`wabp` matches `web-app-build-prod`), matched letters highlighted
 - **Favorites** — star pipelines with `f`; they pin to a ★ section at the top
 - **Stale-deploy detection** — compares each deployed commit against the branch head and flags `⚠ not latest`; uses your `gh` CLI token automatically, and `o` jumps to the commit or pending diff on GitHub
@@ -78,7 +78,7 @@ Env vars override the config for scripting: `GOCD_URL`, `GOCD_USERNAME`, `GOCD_P
 | `j`/`k`, `↓`/`↑` | move selection |
 | `g`/`G` | jump to top / bottom of the focused list |
 | `ctrl-d`/`ctrl-u`, `pgdn`/`pgup` | half-page down / up |
-| `l`/`enter`/`→` | expand group / open pipeline / open a job's console log |
+| `l`/`enter`/`→` | expand group / open pipeline / open a job (console, artifacts, materials tabs) |
 | `h`/`←` | collapse group |
 | `tab` | cycle focus: groups → history → details |
 | `esc` | back: details → history → groups; in groups, clear the filter |
@@ -96,7 +96,7 @@ Env vars override the config for scripting: `GOCD_URL`, `GOCD_USERNAME`, `GOCD_P
 
 Mouse: click focuses a pane and selects a row, click again to open, scroll wheel scrolls the pane under the cursor.
 
-In the console log view: `j`/`k` scroll, `g`/`G` top/bottom (`G` resumes auto-follow), `r` refresh, `q`/`esc` close.
+In the job view: `tab`/`1`-`3` switch between Console, Artifacts, and Materials tabs; `/` searches the log with `n`/`N` to jump between matches; `j`/`k` scroll, `g`/`G` top/bottom (`G` resumes auto-follow), `r` refresh, `q`/`esc` close. On the Artifacts tab, `enter` opens the selected file in your browser.
 
 ## Configuration
 

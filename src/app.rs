@@ -1,7 +1,7 @@
 use crate::api::GoCdClient;
 use crate::config::Config;
 use crate::github::GitHubClient;
-use crate::model::{DashboardGroup, DashboardPipeline, GitRef, PipelineInstance};
+use crate::model::{ArtifactNode, DashboardGroup, DashboardPipeline, GitRef, PipelineInstance, flatten_artifacts};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use ratatui::layout::Rect;
 use ratatui::widgets::{ListState, TableState};
@@ -55,12 +55,49 @@ pub enum DetailRow {
 pub struct ConsoleLogState {
     pub job_ref: JobRef,
     pub title: String,
+    /// Job result at open time ("Passed"/"Failed"/...), shown colored in the status row.
+    pub result: Option<String>,
+    pub tab: JobTab,
     pub lines: Vec<String>,
     pub scroll: usize,
     /// Auto-follow the tail like `tail -f`; turned off by scrolling up, back on by jumping to end.
     pub following: bool,
     pub loading: bool,
     pub error: Option<String>,
+
+    pub search: String,
+    pub search_active: bool,
+    pub matches: Vec<usize>,
+    pub match_idx: usize,
+
+    pub artifacts: Option<Vec<crate::model::ArtifactRow>>,
+    pub artifacts_loading: bool,
+    pub artifact_selected: usize,
+    /// Pre-rendered material lines captured from the run at open time.
+    pub materials: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum JobTab {
+    Console,
+    Artifacts,
+    Materials,
+}
+
+impl ConsoleLogState {
+    pub fn recompute_matches(&mut self) {
+        self.matches.clear();
+        if self.search.is_empty() {
+            return;
+        }
+        let q = self.search.to_lowercase();
+        for (i, l) in self.lines.iter().enumerate() {
+            if l.to_lowercase().contains(&q) {
+                self.matches.push(i);
+            }
+        }
+        self.match_idx = self.match_idx.min(self.matches.len().saturating_sub(1));
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -120,7 +157,7 @@ pub enum Modal {
     Confirm { action: PendingAction, message: String },
     Reauth(ReauthForm),
     GithubConnect { input: String },
-    ConsoleLog(ConsoleLogState),
+    ConsoleLog(Box<ConsoleLogState>),
 }
 
 #[derive(Debug, Clone)]
@@ -155,6 +192,7 @@ pub enum ApiEvent {
     ActionDone(PendingAction, Result<String, String>),
     GithubLatest(String, Result<String, String>),
     ConsoleLog(JobRef, Result<String, String>),
+    Artifacts(JobRef, Result<Vec<ArtifactNode>, String>),
 }
 
 pub struct App {
@@ -518,9 +556,24 @@ impl App {
                         Ok(text) => {
                             state.lines = text.lines().map(str::to_string).collect();
                             state.error = None;
+                            state.recompute_matches();
                             if state.following {
                                 state.scroll = usize::MAX;
                             }
+                        }
+                        Err(e) => state.error = Some(e),
+                    }
+                }
+            }
+            ApiEvent::Artifacts(job_ref, result) => {
+                if let Some(Modal::ConsoleLog(state)) = &mut self.modal
+                    && state.job_ref == job_ref
+                {
+                    state.artifacts_loading = false;
+                    match result {
+                        Ok(nodes) => {
+                            state.artifacts = Some(flatten_artifacts(&nodes));
+                            state.artifact_selected = 0;
                         }
                         Err(e) => state.error = Some(e),
                     }
@@ -631,11 +684,70 @@ impl App {
             },
             Modal::Reauth(form) => self.handle_reauth_key(key, form),
             Modal::GithubConnect { input } => self.handle_github_connect_key(key, input),
-            Modal::ConsoleLog(state) => self.handle_console_log_key(key, state),
+            Modal::ConsoleLog(state) => self.handle_console_log_key(key, *state),
         }
     }
 
     fn handle_console_log_key(&mut self, key: KeyEvent, mut state: ConsoleLogState) {
+        // Search input mode swallows everything except its own controls.
+        if state.search_active {
+            match key.code {
+                KeyCode::Esc => {
+                    state.search_active = false;
+                    state.search.clear();
+                    state.matches.clear();
+                }
+                KeyCode::Enter => {
+                    state.search_active = false;
+                    self.jump_to_match(&mut state);
+                }
+                KeyCode::Backspace => {
+                    state.search.pop();
+                    state.recompute_matches();
+                }
+                KeyCode::Char(c) => {
+                    state.search.push(c);
+                    state.recompute_matches();
+                }
+                _ => {}
+            }
+            self.modal = Some(Modal::ConsoleLog(Box::new(state)));
+            return;
+        }
+
+        // Tab switching works from any tab.
+        match key.code {
+            KeyCode::Tab | KeyCode::Char(']') => {
+                state.tab = match state.tab {
+                    JobTab::Console => JobTab::Artifacts,
+                    JobTab::Artifacts => JobTab::Materials,
+                    JobTab::Materials => JobTab::Console,
+                };
+                state.scroll = 0;
+                self.ensure_artifacts(&mut state);
+                self.modal = Some(Modal::ConsoleLog(Box::new(state)));
+                return;
+            }
+            KeyCode::BackTab | KeyCode::Char('[') => {
+                state.tab = match state.tab {
+                    JobTab::Console => JobTab::Materials,
+                    JobTab::Artifacts => JobTab::Console,
+                    JobTab::Materials => JobTab::Artifacts,
+                };
+                state.scroll = 0;
+                self.ensure_artifacts(&mut state);
+                self.modal = Some(Modal::ConsoleLog(Box::new(state)));
+                return;
+            }
+            KeyCode::Char('1') => state.tab = JobTab::Console,
+            KeyCode::Char('2') => {
+                state.tab = JobTab::Artifacts;
+                self.ensure_artifacts(&mut state);
+            }
+            KeyCode::Char('3') => state.tab = JobTab::Materials,
+            _ => {}
+        }
+
         match key.code {
             KeyCode::Esc | KeyCode::Char('q') => {
                 self.modal = None;
@@ -644,10 +756,45 @@ impl App {
             KeyCode::Char('r') => {
                 state.loading = true;
                 self.spawn_console_fetch(state.job_ref.clone());
+                if state.tab == JobTab::Artifacts {
+                    state.artifacts = None;
+                    self.ensure_artifacts(&mut state);
+                }
             }
-            KeyCode::Up | KeyCode::Char('k') => console_scroll_up(&mut state, self.console_view_height, 1),
-            KeyCode::Down | KeyCode::Char('j') => {
-                state.scroll = state.scroll.saturating_add(1);
+            KeyCode::Char('/') if state.tab == JobTab::Console => {
+                state.search_active = true;
+                state.search.clear();
+                state.matches.clear();
+            }
+            KeyCode::Char('n') if state.tab == JobTab::Console && !state.matches.is_empty() => {
+                state.match_idx = (state.match_idx + 1) % state.matches.len();
+                self.jump_to_match(&mut state);
+            }
+            KeyCode::Char('N') if state.tab == JobTab::Console && !state.matches.is_empty() => {
+                state.match_idx = (state.match_idx + state.matches.len() - 1) % state.matches.len();
+                self.jump_to_match(&mut state);
+            }
+            KeyCode::Up | KeyCode::Char('k') => match state.tab {
+                JobTab::Artifacts => state.artifact_selected = state.artifact_selected.saturating_sub(1),
+                _ => console_scroll_up(&mut state, self.console_view_height, 1),
+            },
+            KeyCode::Down | KeyCode::Char('j') => match state.tab {
+                JobTab::Artifacts => {
+                    let max = state.artifacts.as_ref().map_or(0, |a| a.len().saturating_sub(1));
+                    state.artifact_selected = (state.artifact_selected + 1).min(max);
+                }
+                _ => state.scroll = state.scroll.saturating_add(1),
+            },
+            KeyCode::Enter | KeyCode::Char('o') if state.tab == JobTab::Artifacts => {
+                if let Some((_, name, folder, Some(url))) =
+                    state.artifacts.as_ref().and_then(|a| a.get(state.artifact_selected)).cloned()
+                    && !folder
+                {
+                    match open_url(&url) {
+                        Ok(()) => self.status_line = format!("Opened {name}"),
+                        Err(e) => self.error_line = Some(format!("Couldn't open browser: {e}")),
+                    }
+                }
             }
             KeyCode::PageUp => console_scroll_up(&mut state, self.console_view_height, 20),
             KeyCode::PageDown => {
@@ -669,7 +816,30 @@ impl App {
             }
             _ => {}
         }
-        self.modal = Some(Modal::ConsoleLog(state));
+        self.modal = Some(Modal::ConsoleLog(Box::new(state)));
+    }
+
+    /// Center the viewport on the current match and stop tail-following.
+    fn jump_to_match(&self, state: &mut ConsoleLogState) {
+        if let Some(&line) = state.matches.get(state.match_idx) {
+            state.following = false;
+            state.scroll = line.saturating_sub((self.console_view_height as usize) / 2);
+        }
+    }
+
+    fn ensure_artifacts(&self, state: &mut ConsoleLogState) {
+        if state.tab == JobTab::Artifacts && state.artifacts.is_none() && !state.artifacts_loading {
+            state.artifacts_loading = true;
+            let client = self.client.clone();
+            let tx = self.tx.clone();
+            let j = state.job_ref.clone();
+            thread::spawn(move || {
+                let result = client
+                    .fetch_artifacts(&j.pipeline, j.pipeline_counter, &j.stage, &j.stage_counter, &j.job)
+                    .map_err(|e| format!("{e:#}"));
+                let _ = tx.send(ApiEvent::Artifacts(j, result));
+            });
+        }
     }
 
     fn handle_reauth_key(&mut self, key: KeyEvent, mut form: ReauthForm) {
@@ -941,7 +1111,7 @@ impl App {
         self.loading_groups
             || self.history_loading
             || matches!(self.github_state, GithubState::Checking)
-            || matches!(&self.modal, Some(Modal::ConsoleLog(s)) if s.loading)
+            || matches!(&self.modal, Some(Modal::ConsoleLog(s)) if s.loading || s.artifacts_loading)
     }
 
     // ---- mouse ----
@@ -1291,15 +1461,47 @@ impl App {
         };
         let job_ref =
             JobRef { pipeline, pipeline_counter: inst.counter, stage: stage.name.clone(), stage_counter, job: job.name.clone() };
-        self.modal = Some(Modal::ConsoleLog(ConsoleLogState {
+        let mut materials = Vec::new();
+        if let Some(cause) = &inst.build_cause {
+            if let Some(msg) = &cause.trigger_message {
+                materials.push(format!("Trigger: {msg}"));
+            }
+            for mr in &cause.material_revisions {
+                if let Some(desc) = &mr.material.description {
+                    materials.push(String::new());
+                    materials.push(desc.clone());
+                }
+                for m in &mr.modifications {
+                    let sha = m.revision.as_deref().unwrap_or("-");
+                    let who = m.user_name.as_deref().unwrap_or("-");
+                    materials.push(format!("  {} by {}", &sha[..sha.len().min(12)], who));
+                    if let Some(c) = &m.comment {
+                        for line in c.lines().take(3) {
+                            materials.push(format!("    {line}"));
+                        }
+                    }
+                }
+            }
+        }
+        self.modal = Some(Modal::ConsoleLog(Box::new(ConsoleLogState {
             title: format!("{}/{} - {}", job_ref.stage, job_ref.stage_counter, job_ref.job),
             job_ref: job_ref.clone(),
+            result: job.result.clone().or_else(|| job.state.clone()),
+            tab: JobTab::Console,
             lines: Vec::new(),
             scroll: 0,
             following: true,
             loading: true,
             error: None,
-        }));
+            search: String::new(),
+            search_active: false,
+            matches: Vec::new(),
+            match_idx: 0,
+            artifacts: None,
+            artifacts_loading: false,
+            artifact_selected: 0,
+            materials,
+        })));
         self.last_console_poll = Instant::now();
         self.spawn_console_fetch(job_ref);
     }
