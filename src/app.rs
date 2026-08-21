@@ -1675,7 +1675,14 @@ pub fn fuzzy_match(haystack: &str, needle: &str) -> Option<Vec<usize>> {
 fn open_url(url: &str) -> std::io::Result<()> {
     #[cfg(target_os = "macos")]
     let mut cmd = std::process::Command::new("open");
-    #[cfg(not(target_os = "macos"))]
+    // `start` is a cmd builtin; the empty quoted arg is its window-title slot.
+    #[cfg(target_os = "windows")]
+    let mut cmd = {
+        let mut c = std::process::Command::new("cmd");
+        c.args(["/C", "start", ""]);
+        c
+    };
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     let mut cmd = std::process::Command::new("xdg-open");
     cmd.arg(url).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).spawn().map(|_| ())
 }

@@ -6,10 +6,61 @@ mod model;
 mod ui;
 
 use app::App;
+use clap::{CommandFactory, Parser, Subcommand};
 use crossterm::event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyEventKind};
+use std::path::PathBuf;
 use std::time::Duration;
 
+const LONG_ABOUT: &str = "A fast, keyboard-driven terminal UI for GoCD pipelines. Browse \
+pipeline groups, trigger and monitor runs, drill into stages and jobs, tail console logs, and \
+open builds in the browser without leaving the terminal. Connection details come from \
+config.toml, the in-app setup prompt, or GOCD_* environment variables.";
+
+#[derive(Parser)]
+#[command(name = "lazygocd", version, about, long_about = LONG_ABOUT)]
+struct Cli {
+    /// Directory for config.toml and cached state (overrides $XDG_CONFIG_HOME/lazygocd)
+    #[arg(long, value_name = "PATH")]
+    config_dir: Option<PathBuf>,
+
+    #[command(subcommand)]
+    command: Option<Command>,
+}
+
+#[derive(Subcommand)]
+enum Command {
+    /// Print shell completions for the given shell to stdout
+    #[command(hide = true)]
+    Completions {
+        #[arg(value_enum)]
+        shell: clap_complete::Shell,
+    },
+    /// Print the man page (roff) to stdout
+    #[command(hide = true)]
+    Man,
+}
+
 fn main() -> anyhow::Result<()> {
+    // Parse before any terminal setup so --version/--help/subcommands never
+    // enter the alternate screen.
+    let cli = Cli::parse();
+
+    match cli.command {
+        Some(Command::Completions { shell }) => {
+            clap_complete::generate(shell, &mut Cli::command(), "lazygocd", &mut std::io::stdout());
+            return Ok(());
+        }
+        Some(Command::Man) => {
+            clap_mangen::Man::new(Cli::command()).render(&mut std::io::stdout())?;
+            return Ok(());
+        }
+        None => {}
+    }
+
+    if let Some(dir) = cli.config_dir {
+        config::set_config_dir_override(dir);
+    }
+
     let cfg = match config::load() {
         Ok(cfg) => cfg,
         Err(e) => {
