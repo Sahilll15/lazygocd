@@ -1,0 +1,42 @@
+name: Snyk
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sbom-test:
+    name: SBOM vulnerability scan
+    runs-on: ubuntu-latest
+    env:
+      SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Skip when Snyk is not configured
+        if: env.SNYK_TOKEN == ''
+        run: echo "SNYK_TOKEN is not configured; skipping Snyk scan."
+
+      - uses: dtolnay/rust-toolchain@stable
+        if: env.SNYK_TOKEN != ''
+
+      - uses: snyk/actions/setup@master
+        if: env.SNYK_TOKEN != ''
+
+      - name: Install CycloneDX Cargo generator
+        if: env.SNYK_TOKEN != ''
+        run: cargo install cargo-cyclonedx --locked
+
+      - name: Generate CycloneDX SBOM
+        if: env.SNYK_TOKEN != ''
+        run: cargo cyclonedx --format json --spec-version 1.5 --override-filename lazygocd.cdx
+
+      - name: Scan SBOM with Snyk
+        if: env.SNYK_TOKEN != ''
+        run: snyk sbom test --experimental --file=lazygocd.cdx.json
