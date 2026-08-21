@@ -144,9 +144,11 @@ The dashboard cache lives at `~/.config/lazygocd/dashboard_cache.json` and favor
 | ![dashboard](assets/dashboard.png) | ![history](assets/history.png) |
 
 <details>
-<summary>Live console log with tail-follow</summary>
+<summary>More screenshots: live console logs, log search, rerunning failed jobs</summary>
 
 ![console log](assets/console.png)
+![log search](assets/search.png)
+![rerun failed jobs](assets/rerun.png)
 
 </details>
 
