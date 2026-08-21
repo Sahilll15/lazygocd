@@ -1,5 +1,5 @@
 use crate::config::Config;
-use crate::model::{DashboardEmbedded, DashboardResponse, HistoryResponse, PipelineInstance};
+use crate::model::{ArtifactNode, DashboardEmbedded, DashboardResponse, HistoryResponse, PipelineInstance};
 use anyhow::{Context, Result};
 use reqwest::blocking::{Client, RequestBuilder};
 use reqwest::Method;
@@ -159,6 +159,25 @@ impl GoCdClient {
             anyhow::bail!("GoCD returned {status} cancelling stage: {}", truncate(&body));
         }
         Ok(())
+    }
+
+    /// Artifact tree for one job instance, from the plain file-server .json listing.
+    pub fn fetch_artifacts(
+        &self,
+        pipeline_name: &str,
+        pipeline_counter: i64,
+        stage_name: &str,
+        stage_counter: &str,
+        job_name: &str,
+    ) -> Result<Vec<ArtifactNode>> {
+        let path = format!("/files/{pipeline_name}/{pipeline_counter}/{stage_name}/{stage_counter}/{job_name}.json");
+        let resp = self.request_raw(Method::GET, &path).send().context("requesting artifacts")?;
+        let status = resp.status();
+        let body = resp.text().context("reading artifacts body")?;
+        if !status.is_success() {
+            anyhow::bail!("GoCD returned {status} for artifacts: {}", truncate(&body));
+        }
+        serde_json::from_str(&body).with_context(|| format!("parsing artifacts: {}", truncate(&body)))
     }
 
     /// Raw job console output. Not part of the versioned JSON API - a plain

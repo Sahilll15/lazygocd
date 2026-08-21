@@ -1,5 +1,6 @@
 use crate::app::{
-    App, ConsoleLogState, DetailRow, Focus, GithubState, Modal, ReauthForm, ReauthMode, ReauthStep, Row as TreeRow,
+    App, ConsoleLogState, DetailRow, Focus, GithubState, JobTab, Modal, ReauthForm, ReauthMode, ReauthStep,
+    Row as TreeRow,
 };
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
@@ -597,6 +598,8 @@ fn draw_help(f: &mut Frame, area: Rect) {
         Line::from(Span::styled("in the details pane:", Style::default().fg(theme::MUTED))),
         Line::from("enter        open the selected job's console log"),
         Line::from(Span::styled("in the console log view:", Style::default().fg(theme::MUTED))),
+        Line::from("tab/1-3      switch Console / Artifacts / Materials tabs"),
+        Line::from("/            search the log, n/N next/prev match"),
         Line::from("j/k          scroll   g/G top/bottom   r refresh   q/esc close"),
         Line::from(""),
         Line::from(Span::styled("press any key to close", Style::default().fg(theme::MUTED))),
@@ -625,28 +628,71 @@ fn draw_console_log(f: &mut Frame, area: Rect, state: &ConsoleLogState, tick: u6
     let inner = block.inner(rect);
     f.render_widget(block, rect);
 
-    let layout = Layout::vertical([Constraint::Min(3), Constraint::Length(1), Constraint::Length(1)]).split(inner);
-    let (content_area, status_area, hint_area) = (layout[0], layout[1], layout[2]);
+    let layout = Layout::vertical([
+        Constraint::Length(1),
+        Constraint::Min(3),
+        Constraint::Length(1),
+        Constraint::Length(1),
+    ])
+    .split(inner);
+    let (tabs_area, content_area, status_area, hint_area) = (layout[0], layout[1], layout[2], layout[3]);
 
-    if state.lines.is_empty() && state.loading {
-        f.render_widget(Paragraph::new(format!("{} Loading console log...", spinner(tick))), content_area);
-    } else if state.lines.is_empty() {
-        let msg = state.error.as_deref().unwrap_or("No output yet");
-        f.render_widget(Paragraph::new(Span::styled(msg.to_string(), Style::default().fg(theme::MUTED))), content_area);
-    } else {
-        let visible = content_area.height as usize;
-        let max_scroll = state.lines.len().saturating_sub(visible);
-        let scroll = state.scroll.min(max_scroll);
-        let text: Vec<Line> = state.lines.iter().map(|l| Line::from(strip_console_markers(l))).collect();
-        f.render_widget(Paragraph::new(text).scroll((scroll as u16, 0)), content_area);
+    // Tab bar
+    let mut tab_spans = Vec::new();
+    for (i, (tab, label)) in
+        [(JobTab::Console, "1 Console"), (JobTab::Artifacts, "2 Artifacts"), (JobTab::Materials, "3 Materials")]
+            .iter()
+            .enumerate()
+    {
+        if i > 0 {
+            tab_spans.push(Span::styled("  |  ", Style::default().fg(theme::MUTED)));
+        }
+        if *tab == state.tab {
+            tab_spans.push(Span::styled(
+                (*label).to_string(),
+                Style::default().fg(theme::ACCENT).add_modifier(Modifier::BOLD),
+            ));
+        } else {
+            tab_spans.push(Span::styled((*label).to_string(), Style::default().fg(theme::MUTED)));
+        }
+    }
+    f.render_widget(Paragraph::new(Line::from(tab_spans)), tabs_area);
+
+    match state.tab {
+        JobTab::Console => draw_console_tab(f, content_area, state, tick),
+        JobTab::Artifacts => draw_artifacts_tab(f, content_area, state, tick),
+        JobTab::Materials => {
+            let text: Vec<Line> = state.materials.iter().map(|l| Line::from(l.clone())).collect();
+            let visible = content_area.height as usize;
+            let scroll = state.scroll.min(state.materials.len().saturating_sub(visible));
+            f.render_widget(Paragraph::new(text).scroll((scroll as u16, 0)), content_area);
+        }
     }
 
-    let mut status_spans = vec![Span::styled(format!("{} lines", state.lines.len()), Style::default().fg(theme::MUTED))];
-    if state.loading {
+    // Status row
+    let mut status_spans = Vec::new();
+    if let Some(res) = &state.result {
+        status_spans.push(Span::styled(res.clone(), Style::default().fg(status_color(res)).add_modifier(Modifier::BOLD)));
+        status_spans.push(Span::raw("  "));
+    }
+    status_spans.push(Span::styled(format!("{} lines", state.lines.len()), Style::default().fg(theme::MUTED)));
+    if state.search_active || !state.search.is_empty() {
+        status_spans.push(Span::raw("  "));
+        let cursor = if state.search_active { "\u{2588}" } else { "" };
+        status_spans.push(Span::styled(format!("/{}{}", state.search, cursor), Style::default().fg(theme::ACCENT)));
+        if !state.search.is_empty() {
+            let pos = if state.matches.is_empty() { 0 } else { state.match_idx + 1 };
+            status_spans.push(Span::styled(
+                format!("  {}/{} matches", pos, state.matches.len()),
+                Style::default().fg(if state.matches.is_empty() { theme::DANGER } else { theme::MUTED }),
+            ));
+        }
+    }
+    if state.loading || state.artifacts_loading {
         status_spans.push(Span::raw("  "));
         status_spans.push(Span::styled(format!("{} refreshing", spinner(tick)), Style::default().fg(theme::MUTED)));
     }
-    if state.following {
+    if state.following && state.tab == JobTab::Console {
         status_spans.push(Span::raw("  "));
         status_spans.push(Span::styled("following", Style::default().fg(theme::SUCCESS)));
     }
@@ -656,20 +702,142 @@ fn draw_console_log(f: &mut Frame, area: Rect, state: &ConsoleLogState, tick: u6
     }
     f.render_widget(Paragraph::new(Line::from(status_spans)), status_area);
 
-    f.render_widget(
-        Paragraph::new(Line::from(Span::styled(
-            "j/k scroll   g/G top/bottom   r refresh   q/esc close",
-            Style::default().fg(theme::MUTED),
-        ))),
-        hint_area,
-    );
+    let hint = match state.tab {
+        JobTab::Console => "tab/1-3 switch   / search   n/N match   j/k scroll   g/G top/bottom   r refresh   q/esc close",
+        JobTab::Artifacts => "tab/1-3 switch   j/k select   enter/o open in browser   r refresh   q/esc close",
+        JobTab::Materials => "tab/1-3 switch   j/k scroll   q/esc close",
+    };
+    f.render_widget(Paragraph::new(Line::from(Span::styled(hint, Style::default().fg(theme::MUTED)))), hint_area);
     content_area.height
 }
 
-/// GoCD prefixes each console line with a 2-char marker + '|' (e.g. "##|", "&2|")
-/// indicating stdout/stderr/task-boundary framing - noise for a plain log view.
-fn strip_console_markers(line: &str) -> &str {
-    if line.len() > 3 && line.as_bytes()[2] == b'|' { &line[3..] } else { line }
+fn draw_console_tab(f: &mut Frame, content_area: Rect, state: &ConsoleLogState, tick: u64) {
+    if state.lines.is_empty() && state.loading {
+        f.render_widget(Paragraph::new(format!("{} Loading console log...", spinner(tick))), content_area);
+        return;
+    }
+    if state.lines.is_empty() {
+        let msg = state.error.as_deref().unwrap_or("No output yet");
+        f.render_widget(Paragraph::new(Span::styled(msg.to_string(), Style::default().fg(theme::MUTED))), content_area);
+        return;
+    }
+    let visible = content_area.height as usize;
+    let max_scroll = state.lines.len().saturating_sub(visible);
+    let scroll = state.scroll.min(max_scroll);
+    let query = (!state.search.is_empty()).then(|| state.search.to_lowercase());
+    // Style only the visible window: coloring all N thousand lines every frame is wasted work.
+    let text: Vec<Line> = state
+        .lines
+        .iter()
+        .enumerate()
+        .skip(scroll)
+        .take(visible)
+        .map(|(i, l)| console_line(l, query.as_deref(), state.matches.get(state.match_idx) == Some(&i)))
+        .collect();
+    f.render_widget(Paragraph::new(text), content_area);
+}
+
+fn draw_artifacts_tab(f: &mut Frame, content_area: Rect, state: &ConsoleLogState, tick: u64) {
+    let Some(rows) = &state.artifacts else {
+        f.render_widget(Paragraph::new(format!("{} Loading artifacts...", spinner(tick))), content_area);
+        return;
+    };
+    if rows.is_empty() {
+        f.render_widget(Paragraph::new(Span::styled("No artifacts", Style::default().fg(theme::MUTED))), content_area);
+        return;
+    }
+    let visible = content_area.height as usize;
+    // Keep the selected row in view.
+    let offset = state.artifact_selected.saturating_sub(visible.saturating_sub(1));
+    let text: Vec<Line> = rows
+        .iter()
+        .enumerate()
+        .skip(offset)
+        .take(visible)
+        .map(|(i, (depth, name, folder, _))| {
+            let icon = if *folder { "\u{25b8} " } else { "  " };
+            let selected = i == state.artifact_selected;
+            let style = if selected {
+                Style::default().fg(theme::ACCENT).add_modifier(Modifier::BOLD)
+            } else if *folder {
+                Style::default().add_modifier(Modifier::BOLD)
+            } else {
+                Style::default()
+            };
+            Line::from(vec![
+                Span::raw(if selected { "\u{25b6} " } else { "  " }.to_string()),
+                Span::raw("  ".repeat(*depth)),
+                Span::styled(format!("{icon}{name}"), style),
+            ])
+        })
+        .collect();
+    f.render_widget(Paragraph::new(text), content_area);
+}
+
+/// One console line -> styled spans: GoCD marker classified, timestamp muted,
+/// severity keywords colored, search matches reversed.
+fn console_line<'a>(raw: &'a str, query: Option<&str>, current_match: bool) -> Line<'a> {
+    let (marker, rest) = if raw.len() > 3 && raw.as_bytes()[2] == b'|' {
+        (&raw[..2], &raw[3..])
+    } else {
+        ("", raw)
+    };
+
+    // "HH:MM:SS.mmm " timestamp prefix, rendered muted.
+    let (ts, body) = if rest.len() >= 13 && rest.as_bytes().get(2) == Some(&b':') && rest.as_bytes().get(5) == Some(&b':') {
+        rest.split_at(13.min(rest.len()))
+    } else {
+        ("", rest)
+    };
+
+    let body_style = console_body_style(marker, body);
+    let mut spans = vec![Span::styled(ts, Style::default().fg(theme::MUTED))];
+
+    if let Some(q) = query {
+        // Highlight case-insensitive matches within the body.
+        let lower = body.to_lowercase();
+        let mut pos = 0;
+        while let Some(hit) = lower[pos..].find(q) {
+            let start = pos + hit;
+            let end = start + q.len();
+            spans.push(Span::styled(&body[pos..start], body_style));
+            let hl = if current_match {
+                Style::default().fg(Color::Black).bg(theme::WARNING).add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(Color::Black).bg(theme::ACCENT)
+            };
+            spans.push(Span::styled(&body[start..end], hl));
+            pos = end;
+        }
+        spans.push(Span::styled(&body[pos..], body_style));
+    } else {
+        spans.push(Span::styled(body, body_style));
+    }
+    Line::from(spans)
+}
+
+fn console_body_style(marker: &str, body: &str) -> Style {
+    let lower = body.to_ascii_lowercase();
+    // Failure signals win, then warnings, then success, then framing chatter.
+    if lower.contains("error")
+        || lower.contains("failed")
+        || lower.contains("failure")
+        || lower.contains("exception")
+        || lower.contains("fatal")
+        || lower.contains("traceback")
+        || lower.contains("exit code: 1")
+        || marker == "!!"
+    {
+        Style::default().fg(theme::DANGER)
+    } else if lower.contains("warn") || lower.contains("deprecat") || marker == "&2" {
+        Style::default().fg(theme::WARNING)
+    } else if lower.contains("passed") || lower.contains("success") || lower.contains("job completed") {
+        Style::default().fg(theme::SUCCESS)
+    } else if body.starts_with("[go]") || marker == "##" {
+        Style::default().fg(theme::MUTED)
+    } else {
+        Style::default()
+    }
 }
 
 fn draw_github_connect(f: &mut Frame, area: Rect, input: &str) {
