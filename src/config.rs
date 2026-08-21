@@ -1,6 +1,8 @@
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::ffi::OsString;
+use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
@@ -42,22 +44,46 @@ impl Default for Config {
     }
 }
 
+static CONFIG_DIR_OVERRIDE: OnceLock<PathBuf> = OnceLock::new();
+
+/// Called once from main with the --config-dir flag, before any path fn runs.
+pub fn set_config_dir_override(dir: PathBuf) {
+    let _ = CONFIG_DIR_OVERRIDE.set(dir);
+}
+
+/// Resolution order: --config-dir flag > $XDG_CONFIG_HOME/lazygocd > ~/.config/lazygocd.
+pub fn config_dir() -> Result<PathBuf> {
+    resolve_config_dir(
+        CONFIG_DIR_OVERRIDE.get().map(PathBuf::as_path),
+        std::env::var_os("XDG_CONFIG_HOME"),
+        dirs::home_dir(),
+    )
+}
+
+fn resolve_config_dir(flag: Option<&Path>, xdg: Option<OsString>, home: Option<PathBuf>) -> Result<PathBuf> {
+    if let Some(dir) = flag {
+        return Ok(dir.to_path_buf());
+    }
+    if let Some(xdg) = xdg.filter(|v| !v.is_empty()) {
+        return Ok(PathBuf::from(xdg).join("lazygocd"));
+    }
+    let home = home.context("could not determine home directory")?;
+    Ok(home.join(".config").join("lazygocd"))
+}
+
 pub fn config_path() -> Result<PathBuf> {
-    let home = dirs::home_dir().context("could not determine home directory")?;
-    Ok(home.join(".config").join("lazygocd").join("config.toml"))
+    Ok(config_dir()?.join("config.toml"))
 }
 
 /// Local disk cache of the last successful dashboard load, so the next launch
 /// can show data instantly instead of waiting on a fresh network round trip.
 pub fn dashboard_cache_path() -> Result<PathBuf> {
-    let home = dirs::home_dir().context("could not determine home directory")?;
-    Ok(home.join(".config").join("lazygocd").join("dashboard_cache.json"))
+    Ok(config_dir()?.join("dashboard_cache.json"))
 }
 
 /// Starred pipeline names, pinned to the top of the tree regardless of group.
 pub fn favorites_path() -> Result<PathBuf> {
-    let home = dirs::home_dir().context("could not determine home directory")?;
-    Ok(home.join(".config").join("lazygocd").join("favorites.json"))
+    Ok(config_dir()?.join("favorites.json"))
 }
 
 /// Loads config from the file at `config_path()` if present, otherwise an
@@ -112,4 +138,37 @@ pub fn save(path: &PathBuf, cfg: &Config) -> Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn flag_override_beats_xdg_and_home() {
+        let dir = resolve_config_dir(
+            Some(Path::new("/custom/cfg")),
+            Some("/xdg".into()),
+            Some(PathBuf::from("/home/u")),
+        );
+        assert_eq!(dir.unwrap(), PathBuf::from("/custom/cfg"));
+    }
+
+    #[test]
+    fn xdg_config_home_beats_home() {
+        let dir = resolve_config_dir(None, Some("/xdg".into()), Some(PathBuf::from("/home/u")));
+        assert_eq!(dir.unwrap(), PathBuf::from("/xdg/lazygocd"));
+    }
+
+    #[test]
+    fn empty_xdg_falls_back_to_home() {
+        let dir = resolve_config_dir(None, Some("".into()), Some(PathBuf::from("/home/u")));
+        assert_eq!(dir.unwrap(), PathBuf::from("/home/u/.config/lazygocd"));
+    }
+
+    #[test]
+    fn no_xdg_falls_back_to_home() {
+        let dir = resolve_config_dir(None, None, Some(PathBuf::from("/home/u")));
+        assert_eq!(dir.unwrap(), PathBuf::from("/home/u/.config/lazygocd"));
+    }
 }
