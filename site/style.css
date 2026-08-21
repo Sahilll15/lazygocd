@@ -227,6 +227,7 @@ fieldset.panel{
   padding:20px 22px 18px;
   margin:0 0 26px;
   min-width:0;
+  min-inline-size:0;
   background:rgba(12,18,25,.45);
 }
 fieldset.panel>legend{
@@ -509,45 +510,97 @@ fieldset.t-panel.is-focused>legend{color:var(--cyan)}
 .next-links{display:flex;gap:14px;flex-wrap:wrap;margin-top:44px}
 
 /* ---------- changelog ---------- */
-.changelog-wrap{max-width:900px}
-.release-card{
+.changelog-wrap{max-width:960px}
+.changelog-panel{background:rgba(12,18,25,.42)}
+.timeline{
   position:relative;
-  max-width:100%;
-  border:1px solid var(--border);
-  border-left-color:rgba(63,213,230,.55);
-  background:linear-gradient(180deg,rgba(255,255,255,.045),rgba(255,255,255,.02));
-  border-radius:14px;
-  padding:24px 26px 22px;
-  margin-bottom:18px;
-  box-shadow:0 16px 40px rgba(0,0,0,.18);
+  display:grid;
+  gap:0;
+  min-width:0;
 }
-.release-card.unreleased{border-left-color:rgba(245,185,66,.72)}
-.release-card header{margin-bottom:14px}
-.release-card h2{font-size:1.25rem;margin:.35em 0 0}
-.release-card time{
-  margin-left:10px;
+.timeline::before{
+  content:"";
+  position:absolute;
+  left:157px;
+  top:18px;
+  bottom:18px;
+  width:1px;
+  background:linear-gradient(180deg,var(--cyan),var(--border) 18%,var(--border) 82%,transparent);
+}
+.release-item{
+  position:relative;
+  display:grid;
+  grid-template-columns:132px 1fr;
+  gap:34px;
+  padding:0 0 28px;
+}
+.release-item:last-child{padding-bottom:0}
+.release-meta{
+  position:relative;
+  display:flex;
+  flex-direction:column;
+  align-items:flex-end;
+  padding-top:3px;
   font-family:var(--mono);
-  font-size:.78rem;
-  color:var(--muted);
+}
+.release-dot{
+  position:absolute;
+  right:-43px;
+  top:12px;
+  width:12px;
+  height:12px;
+  border:2px solid var(--cyan);
+  border-radius:50%;
+  background:var(--bg);
+  box-shadow:0 0 0 4px var(--bg),0 0 16px rgba(63,213,230,.28);
+}
+.unreleased .release-dot{
+  border-color:var(--yellow);
+  box-shadow:0 0 0 4px var(--bg),0 0 16px rgba(232,197,66,.25);
 }
 .release-tag{
-  display:inline-flex;
-  align-items:center;
-  border:1px solid rgba(63,213,230,.45);
-  border-radius:999px;
-  padding:4px 9px;
-  font-family:var(--mono);
-  font-size:.78rem;
+  font-weight:700;
+  font-size:.86rem;
   color:var(--cyan);
-  background:rgba(63,213,230,.08);
+  white-space:nowrap;
 }
-.unreleased .release-tag{border-color:rgba(245,185,66,.55);color:var(--yellow);background:rgba(245,185,66,.08)}
-.release-card ul{margin:0;padding-left:1.15em}
-.release-card li{margin:.62em 0;color:var(--text)}
-.release-card,
-.release-card h2,
-.release-card li{overflow-wrap:anywhere}
-.release-card code{white-space:normal}
+.unreleased .release-tag{color:var(--yellow)}
+.release-meta time{
+  margin-top:3px;
+  font-size:.72rem;
+  color:var(--faint);
+  white-space:nowrap;
+}
+.release-body{
+  min-width:0;
+  min-inline-size:0;
+  max-width:100%;
+  border:1px solid var(--border);
+  border-radius:10px;
+  background:rgba(10,16,22,.52);
+  padding:15px 18px 14px;
+}
+.release-body:hover{
+  border-color:var(--border-bright);
+  background:rgba(13,23,31,.58);
+}
+.release-body h2{
+  font-size:1rem;
+  margin:0 0 .55em;
+}
+.release-body ul{
+  margin:0;
+  padding-left:1.15em;
+}
+.release-body li{
+  margin:.42em 0;
+  color:var(--text);
+  font-size:.94rem;
+}
+.release-body,
+.release-body h2,
+.release-body li{overflow-wrap:anywhere}
+.release-body code{white-space:normal}
 
 /* ---------- footer ---------- */
 .site-footer{
@@ -601,12 +654,34 @@ fieldset.t-panel.is-focused>legend{color:var(--cyan)}
   .steps>li{padding-left:48px}
   .steps>li::before{width:32px;height:32px}
   .steps>li::after{left:16px;top:38px}
+  .timeline::before{left:6px}
+  .release-item{
+    grid-template-columns:1fr;
+    gap:10px;
+    padding-left:28px;
+  }
+  .release-meta{
+    align-items:flex-start;
+    flex-direction:row;
+    gap:10px;
+    flex-wrap:wrap;
+  }
+  .release-dot{left:-27px;right:auto;top:9px}
+  .release-meta time{margin-top:1px}
+  .release-body{
+    border:none;
+    border-radius:0;
+    background:transparent;
+    padding:2px 0 0;
+  }
+  .release-body:hover{
+    border-color:transparent;
+    background:transparent;
+  }
 }
 @media (max-width:480px){
   .wrap{padding-left:18px;padding-right:18px}
   .page-hero{padding-left:18px;padding-right:18px}
-  .release-card{padding:20px 18px}
-  .release-card time{display:block;margin:8px 0 0}
   .hrow span:nth-child(4),.hrow.hhead span:nth-child(4){display:none}
   .hero-cta .btn{width:100%;text-align:center}
 }
