@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Install — lazygocd</title>
+<meta name="description" content="Install lazygocd via Homebrew, cargo, or a prebuilt binary from GitHub Releases.">
+<meta name="theme-color" content="#0a0f14">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='2' y='2' width='60' height='60' rx='14' fill='%230b1117' stroke='%233fd5e6' stroke-width='4'/%3E%3Cpath d='M17 23l11 9-11 9' fill='none' stroke='%233fd5e6' stroke-width='6' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M33 41h13' stroke='%233fd5e6' stroke-width='6' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap header-row">
+    <a class="brand" href="/" aria-label="lazygocd home">
+      <span class="brand-badge">lazygocd</span><span class="led" aria-hidden="true"></span>
+    </a>
+    <button class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+    <nav class="site-nav" id="site-nav" aria-label="Site">
+      <a href="/install" class="active">install</a>
+      <a href="/quickstart">quickstart</a>
+      <a href="/keybindings">keybindings</a>
+      <a href="/features">features</a>
+      <a href="/changelog">changelog</a>
+      <a href="/troubleshooting">troubleshooting</a>
+      <a class="nav-gh" href="https://github.com/Sahilll15/lazygocd">GitHub &nearr;</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div class="page-hero wrap">
+    <div class="crumb"><span class="tilde">~</span>/lazygocd/install</div>
+    <h1>Install</h1>
+    <p class="lede">One binary, no runtime dependencies, nothing to set up on the GoCD server. Homebrew is the easiest path; cargo and prebuilt binaries work everywhere else.</p>
+  </div>
+
+  <section>
+    <div class="wrap">
+      <h2>Homebrew (recommended)</h2>
+      <p class="sec-lede">macOS and Linuxbrew. Installs from the tap and keeps you on the latest release via <code>brew upgrade</code>.</p>
+      <fieldset class="panel accent" style="max-width:680px">
+        <legend>brew</legend>
+        <div class="cmd">
+          <pre><code><span class="ps1">$ </span>brew install Sahilll15/tap/lazygocd</code></pre>
+          <button class="copy-btn" type="button" aria-label="Copy brew install command">copy</button>
+        </div>
+        <div class="cmd" style="margin-bottom:0">
+          <pre><code><span class="cmt"># later, to update</span>
+<span class="ps1">$ </span>brew upgrade lazygocd</code></pre>
+          <button class="copy-btn" type="button" aria-label="Copy brew upgrade command">copy</button>
+        </div>
+      </fieldset>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <h2>Cargo</h2>
+      <p class="sec-lede">Needs a recent Rust toolchain (<a href="https://rustup.rs/">rustup.rs</a>). Either install straight from the repository:</p>
+      <div class="cmd" style="max-width:680px">
+        <pre><code><span class="ps1">$ </span>cargo install --git https://github.com/Sahilll15/lazygocd</code></pre>
+        <button class="copy-btn" type="button" aria-label="Copy cargo install command">copy</button>
+      </div>
+      <p class="sec-lede" style="margin-bottom:1em">Or clone and build a release binary yourself:</p>
+      <div class="cmd" style="max-width:680px">
+        <pre><code><span class="ps1">$ </span>git clone https://github.com/Sahilll15/lazygocd
+<span class="ps1">$ </span>cd lazygocd
+<span class="ps1">$ </span>cargo build --release
+<span class="ps1">$ </span>./target/release/lazygocd</code></pre>
+        <button class="copy-btn" type="button" aria-label="Copy clone and build commands">copy</button>
+      </div>
+      <div class="callout" style="max-width:680px">
+        <span class="co-label">note</span>
+        The built binary lands at <code>target/release/lazygocd</code>. Copy it anywhere on your <code>PATH</code> if you want to run it as just <code>lazygocd</code>.
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <h2>Prebuilt binaries</h2>
+      <p class="sec-lede">Each release on the <a href="https://github.com/Sahilll15/lazygocd/releases">GitHub Releases page</a> ships prebuilt archives. Download the one for your platform, unpack it, and put the binary on your <code>PATH</code>:</p>
+      <div class="cmd" style="max-width:680px">
+        <pre><code><span class="cmt"># asset names vary per release; grab the one matching your OS/arch</span>
+<span class="ps1">$ </span>tar -xzf lazygocd-&lt;version&gt;-&lt;target&gt;.tar.gz
+<span class="ps1">$ </span>sudo mv lazygocd /usr/local/bin/</code></pre>
+        <button class="copy-btn" type="button" aria-label="Copy binary install commands">copy</button>
+      </div>
+      <div class="callout warn" style="max-width:680px">
+        <span class="co-label">macOS gatekeeper</span>
+        If macOS quarantines a downloaded binary, clear the flag with <code>xattr -d com.apple.quarantine ./lazygocd</code>. Homebrew installs don't need this.
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <h2>Then run it</h2>
+      <p class="sec-lede">There's no separate setup command. The first launch opens a connect form right inside the TUI.</p>
+      <div class="cmd" style="max-width:680px">
+        <pre><code><span class="ps1">$ </span>lazygocd</code></pre>
+        <button class="copy-btn" type="button" aria-label="Copy run command">copy</button>
+      </div>
+      <div class="next-links">
+        <a class="btn btn-primary" href="/quickstart">Quickstart: connect to your server</a>
+        <a class="btn btn-ghost" href="/keybindings">Keybindings</a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="tui-strip" aria-hidden="true">
+    <div class="wrap"><span><b>j/k</b> move</span><span><b>enter</b> open</span><span><b>t</b> trigger</span><span><b>p</b> pause</span><span><b>f</b> favorite</span><span><b>/</b> filter</span><span><b>X</b> cancel</span><span><b>A</b> gocd</span><span><b>@</b> github</span><span><b>?</b> help</span><span><b>q</b> quit</span></div>
+  </div>
+  <div class="wrap foot-row">
+    <div class="foot-left"><span class="brand-badge sm">lazygocd</span><span>MIT license</span></div>
+    <div class="foot-links">
+      <a href="https://github.com/Sahilll15/lazygocd">source &nearr;</a>
+      <a href="https://github.com/Sahilll15/lazygocd/issues">issues &nearr;</a>
+      <a href="https://www.gocd.org/">GoCD &nearr;</a>
+      <a href="https://ratatui.rs/">ratatui &nearr;</a>
+    </div>
+  </div>
+</footer>
+
+<script src="/site.js"></script>
+</body>
+</html>

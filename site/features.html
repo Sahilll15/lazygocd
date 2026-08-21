@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Features — lazygocd</title>
+<meta name="description" content="How lazygocd stays fast: one gzipped dashboard call, a disk cache for instant startup, hover prefetch, live console log tailing, GitHub commit comparison, and keyboard run control.">
+<meta name="theme-color" content="#0a0f14">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='2' y='2' width='60' height='60' rx='14' fill='%230b1117' stroke='%233fd5e6' stroke-width='4'/%3E%3Cpath d='M17 23l11 9-11 9' fill='none' stroke='%233fd5e6' stroke-width='6' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M33 41h13' stroke='%233fd5e6' stroke-width='6' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap header-row">
+    <a class="brand" href="/" aria-label="lazygocd home">
+      <span class="brand-badge">lazygocd</span><span class="led" aria-hidden="true"></span>
+    </a>
+    <button class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+    <nav class="site-nav" id="site-nav" aria-label="Site">
+      <a href="/install">install</a>
+      <a href="/quickstart">quickstart</a>
+      <a href="/keybindings">keybindings</a>
+      <a href="/features" class="active">features</a>
+      <a href="/changelog">changelog</a>
+      <a href="/troubleshooting">troubleshooting</a>
+      <a class="nav-gh" href="https://github.com/Sahilll15/lazygocd">GitHub &nearr;</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div class="page-hero wrap">
+    <div class="crumb"><span class="tilde">~</span>/lazygocd/features</div>
+    <h1>How it works</h1>
+    <p class="lede">The design goal is a dashboard that feels local even when the server is huge and far away. Every trick below exists to serve that: fewer round trips, aggressive caching, and never blocking the UI on the network.</p>
+  </div>
+
+  <section style="max-width:820px;margin-left:auto;margin-right:auto">
+    <div class="wrap">
+
+      <h2 id="dashboard">The whole fleet in one call</h2>
+      <p>The pipeline tree, pause states, and latest-run statuses all come from a single request to GoCD's <code>/api/dashboard</code>. There's no N+1 walk over groups or pipelines, so the cost of a refresh doesn't grow with how much you have.</p>
+      <p>The client requests gzip, which matters more than it sounds. On a real GoCD 23.5.0 instance with many groups and 2,389 pipelines, the dashboard payload is 5.3&nbsp;MB uncompressed but only 165&nbsp;KB compressed, and the load dropped from ~20 seconds to 2&ndash;4 seconds. The request timeout is a generous 45 seconds regardless, for slower networks.</p>
+      <p>The tree starts fully collapsed, because a large org's groups expanded at once would be unusable. Press <kbd>/</kbd> to fuzzy-filter by name across every group, collapsed or not.</p>
+
+      <h2 id="views">Personalized GoCD views</h2>
+      <p>GoCD's web dashboard lets each user keep personalized view tabs. lazygocd reads those same server-side filters from GoCD's <code>pipeline_selection</code> endpoint and applies them with <code>/api/dashboard?viewName=...</code>, so <kbd>v</kbd> switches to the exact view you use in the browser.</p>
+      <p>Creating a view is terminal-native too: filter with <kbd>/</kbd>, press <kbd>V</kbd>, name the view, and lazygocd saves the matching pipelines as a whitelist view on the server. The new view appears in GoCD's web UI as well, and writes use <code>If-Match</code> so a concurrent web edit cannot be silently overwritten.</p>
+
+      <h2 id="cache">Instant startup from the disk cache</h2>
+      <p>After every successful load, the dashboard is written to <code>~/.config/lazygocd/dashboard_cache.json</code>. The next launch reads it and paints your whole fleet immediately, before touching the network, while a fresh load runs in the background. The header makes the state honest:</p>
+      <div class="mini-term">
+        <div class="mrow"><span class="t-badge"> lazygocd </span> <span class="c-yellow">&#9679;</span> <span class="c-muted">https://gocd.example.com/go</span>  <span class="c-green">cached, refreshing...</span></div>
+      </div>
+      <p>The LED next to the server URL is the connection at a glance: green connected, yellow loading, red error. When the fresh data lands, the view updates in place.</p>
+
+      <h2 id="history">History cache and hover prefetch</h2>
+      <p>Run history and stage details load lazily, per pipeline, via <code>/api/pipelines/:name/history</code>, only when you open one. Two layers keep that from ever feeling lazy:</p>
+      <ul>
+        <li><strong>In-session cache.</strong> Once you've opened a pipeline's history, reopening it later in the same session is instant, served from memory while a background refresh keeps it current.</li>
+        <li><strong>Hover prefetch.</strong> Resting the mouse cursor on a pipeline row for ~300ms starts loading its history in the background, so pressing <kbd>enter</kbd> often finds it already there.</li>
+      </ul>
+
+      <h2 id="logs">Live console logs with auto-tail</h2>
+      <p>From the Details pane, <kbd>enter</kbd> on any job opens its raw console log in a scrollable full-screen view. While the stage is still running, the log refreshes itself every ~3 seconds and follows the newest output; once the stage finishes, it stops polling on its own.</p>
+      <div class="mini-term">
+        <div class="mrow"><span class="c-muted">1,204 lines  &#10247; refreshing  </span><span class="c-green">following</span></div>
+        <div class="mrow"><span class="c-muted">j/k scroll   g/G top/bottom   r refresh   q/esc close</span></div>
+      </div>
+      <p>Tailing is incremental: only new lines are fetched while a job runs, and background dashboard polls revalidate with ETag/304, so steady-state network cost is near zero. History paginates as you scroll, older pages loading automatically.</p>
+      <p>Scrolling up detaches you from the tail so you can read; <kbd>G</kbd> jumps back to the bottom and resumes following. Logs are colorized for scanning: failures and errors in red, warnings and stderr in yellow, successes in green, timestamps and agent chatter dimmed. <kbd>/</kbd> searches with inline highlighting and <kbd>n</kbd>/<kbd>N</kbd> jump between matches.</p>
+      <p>The job view is tabbed like GoCD's own job page: <b>Console</b>, <b>Artifacts</b> (the job's file tree, <kbd>enter</kbd> opens a file in your browser), and <b>Materials</b> (the trigger, repo and branch, and the commits behind the run).</p>
+      <p>Act on what you see: <kbd>R</kbd> reruns a failed run's failed jobs (or the whole stage), <kbd>T</kbd> triggers with environment variables, and desktop notifications fire when a favorited pipeline starts failing. Every git material gets its own stale-deploy check, and GitHub Enterprise works via <code>github_api_base</code> in the config.</p>
+
+      <h2 id="github">Deployed-commit check</h2>
+      <p>The question behind most dashboard visits is "is what's deployed actually the latest code?" When a pipeline's latest run has a direct Git material (not a chained upstream-pipeline material), opening its history compares the deployed commit against the newest commit on that branch and answers inline in the Details panel:</p>
+      <div class="mini-term">
+        <div class="mrow"><span class="c-muted">GitHub: </span>acme/web-app@main</div>
+        <div class="mrow"><span class="c-muted">Deployed: </span>4f9c2e1  <span class="c-green">&#10003; up to date</span></div>
+      </div>
+      <div class="mini-term">
+        <div class="mrow"><span class="c-muted">GitHub: </span>acme/api@main</div>
+        <div class="mrow"><span class="c-muted">Deployed: </span>b3a91d0  <span class="c-yellow">&#9888; not latest (latest 8c04f7e)</span></div>
+      </div>
+      <p>If you have the GitHub CLI signed in, lazygocd uses <code>gh auth token</code> automatically, so private repos work with zero setup. Otherwise public repos still work unauthenticated (rate-limited), and <kbd>@</kbd> lets you paste a personal access token. Press <kbd>o</kbd> on any run to open its commit on GitHub, or the pending diff when the latest deploy is behind the branch head. The check only runs for the latest run, never for an older row you happen to have selected.</p>
+
+      <h2 id="cancel">Cancel vs pause</h2>
+      <p>The two are deliberately separate keys because they do different things:</p>
+      <div class="tblwrap">
+        <table class="tbl">
+          <thead><tr><th>Key</th><th>What it does</th><th>Touches a running build?</th></tr></thead>
+          <tbody>
+            <tr><td><kbd>p</kbd> pause</td><td>Blocks future scheduling of the pipeline</td><td>No, a run already in flight keeps going</td></tr>
+            <tr><td><kbd>X</kbd> cancel</td><td>Stops the currently running stage via <code>POST /api/stages/.../cancel</code></td><td>Yes, that's its whole job</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p><kbd>X</kbd> is only offered when the open pipeline's latest run actually has an active stage, and every mutating action (trigger, pause, unpause, cancel) sits behind a confirm prompt and is sent with the <code>X-GoCD-Confirm</code> header GoCD requires.</p>
+
+      <h2 id="favorites">Favorites</h2>
+      <p>Press <kbd>f</kbd> to star a pipeline. Starred pipelines pin to a gold <span class="c-gold">&#9733; Favorites</span> section at the top of the tree, expanded by default, and persist across sessions in <code>~/.config/lazygocd/favorites.json</code>. A star also shows next to a favorited pipeline in its normal group listing, so you can tell at a glance from either place.</p>
+      <p>While a <kbd>/</kbd> filter is active the Favorites section hides itself, so search results stay a pure set with no duplicates.</p>
+
+      <h2 id="never-blocks">The UI never blocks</h2>
+      <p>All network calls run on background threads; the interface keeps responding while anything loads, with an animated spinner instead of frozen text. Input polling runs at 40ms (down from an earlier 150ms) so keypresses land instantly, and the dashboard plus the open pipeline's history silently re-poll every <code>poll_interval_secs</code> (default 30, configurable in <code>config.toml</code>).</p>
+      <p>A k9s-style stats bar keeps the fleet's health at a glance, and it only surfaces non-nominal states. Paused, building, and failed counts appear only when non-zero, so a healthy fleet shows a clean bar instead of a row of zeros.</p>
+
+      <div class="next-links">
+        <a class="btn btn-primary" href="/install">Install it</a>
+        <a class="btn btn-ghost" href="/changelog">Changelog</a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="tui-strip" aria-hidden="true">
+    <div class="wrap"><span><b>j/k</b> move</span><span><b>enter</b> open</span><span><b>t</b> trigger</span><span><b>p</b> pause</span><span><b>f</b> favorite</span><span><b>/</b> filter</span><span><b>X</b> cancel</span><span><b>A</b> gocd</span><span><b>@</b> github</span><span><b>?</b> help</span><span><b>q</b> quit</span></div>
+  </div>
+  <div class="wrap foot-row">
+    <div class="foot-left"><span class="brand-badge sm">lazygocd</span><span>MIT license</span></div>
+    <div class="foot-links">
+      <a href="https://github.com/Sahilll15/lazygocd">source &nearr;</a>
+      <a href="https://github.com/Sahilll15/lazygocd/issues">issues &nearr;</a>
+      <a href="https://www.gocd.org/">GoCD &nearr;</a>
+      <a href="https://ratatui.rs/">ratatui &nearr;</a>
+    </div>
+  </div>
+</footer>
+
+<script src="/site.js"></script>
+</body>
+</html>

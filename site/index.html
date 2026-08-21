@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>lazygocd — a fast terminal UI for GoCD</title>
+<meta name="description" content="lazygocd is a fast, keyboard-driven terminal UI for GoCD CI/CD servers, written in Rust. Browse pipelines, trigger runs, tail console logs, and check deployed commits without leaving your terminal.">
+<meta name="theme-color" content="#0a0f14">
+<meta property="og:title" content="lazygocd — a fast terminal UI for GoCD">
+<meta property="og:description" content="Your whole GoCD fleet in one keyboard-driven terminal screen. Written in Rust, open source, MIT.">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='2' y='2' width='60' height='60' rx='14' fill='%230b1117' stroke='%233fd5e6' stroke-width='4'/%3E%3Cpath d='M17 23l11 9-11 9' fill='none' stroke='%233fd5e6' stroke-width='6' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M33 41h13' stroke='%233fd5e6' stroke-width='6' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap header-row">
+    <a class="brand" href="/" aria-label="lazygocd home">
+      <span class="brand-badge">lazygocd</span><span class="led" aria-hidden="true"></span>
+    </a>
+    <button class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+    <nav class="site-nav" id="site-nav" aria-label="Site">
+      <a href="/install">install</a>
+      <a href="/quickstart">quickstart</a>
+      <a href="/keybindings">keybindings</a>
+      <a href="/features">features</a>
+      <a href="/changelog">changelog</a>
+      <a href="/troubleshooting">troubleshooting</a>
+      <a class="nav-gh" href="https://github.com/Sahilll15/lazygocd">GitHub &nearr;</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+
+  <!-- ================= hero ================= -->
+  <div class="hero wrap">
+    <div class="hero-eyebrow rise"><span class="dot">&#9679;</span> open source &middot; written in Rust &middot; MIT</div>
+    <h1 class="rise d1"><span class="tilde">~/</span>lazygocd<span class="cursor" aria-hidden="true"></span></h1>
+    <p class="pitch rise d2">A <b>fast, keyboard-driven terminal UI</b> for <a href="https://www.gocd.org/">GoCD</a>. Your whole fleet, pipeline groups, run history, stages, and live console logs, on one keyboard-driven screen.</p>
+    <div class="hero-cta rise d3">
+      <a class="btn btn-primary" href="/install">Install</a>
+      <a class="btn btn-ghost" href="https://github.com/Sahilll15/lazygocd">View source &nearr;</a>
+    </div>
+    <div class="hero-install rise d4">
+      <div class="cmd">
+        <pre><code><span class="ps1">$ </span>brew install Sahilll15/tap/lazygocd</code></pre>
+        <button class="copy-btn" type="button" aria-label="Copy install command">copy</button>
+      </div>
+    </div>
+    <div class="hero-meta rise d5">
+      <span>single binary</span><span>no server-side setup</span><span>macOS &amp; Linux</span>
+    </div>
+
+    <!-- ================= terminal mockup ================= -->
+    <figure class="term rise d5" role="img" aria-label="A recreation of the lazygocd interface: a pipeline groups tree on the left with a gold Favorites section, a run history table on the top right, and a details panel with stages and a GitHub commit check on the bottom right.">
+      <div class="term-chrome">
+        <span class="tdot td-r"></span><span class="tdot td-y"></span><span class="tdot td-g"></span>
+        <span class="term-title">lazygocd &mdash; 132&times;38</span>
+      </div>
+      <div class="term-screen">
+        <div class="t-header"><span class="t-badge"> lazygocd </span> <span class="c-green">&#9679;</span> <span class="c-muted t-url">https://gocd.example.com/go</span><span class="c-green hide-sm">  Triggered web-app-build</span></div>
+        <div class="t-stats"><b class="c-cyan">6</b><span class="c-muted"> groups</span>   <b class="c-cyan">42</b><span class="c-muted"> pipelines</span>   <span class="c-yellow">&#9208; 1</span><span class="c-muted"> paused</span>   <span class="c-yellow">&#9680; 1</span><span class="c-muted"> building</span>   <span class="c-red">&#9679; 1</span><span class="c-muted"> failed</span></div>
+        <div class="t-body">
+          <fieldset class="t-panel is-focused">
+            <legend>Pipeline Groups</legend>
+            <div class="trow"><span class="c-gold">&#9662; &#9733; Favorites</span><span class="c-muted"> (3)</span></div>
+            <div class="trow is-selected"><span class="t-cursor">&#9654; </span><span class="c-yellow">&#9680;</span> web-app-build</div>
+            <div class="trow">    <span class="c-green">&#9679;</span> api-deploy-prod</div>
+            <div class="trow">    <span class="c-red">&#9679;</span> payment-service</div>
+            <div class="trow"><b>&#9656; frontend</b><span class="c-muted"> (12)</span><span class="c-yellow"> &#9680;1</span></div>
+            <div class="trow"><b>&#9662; backend</b><span class="c-muted"> (9)</span><span class="c-red"> &#9679;1</span></div>
+            <div class="trow">    <span class="c-green">&#9679;</span> auth-service</div>
+            <div class="trow">    <span class="c-green">&#9679;</span> <span class="c-gold">&#9733; </span>api-deploy-prod</div>
+            <div class="trow">    <span class="c-red">&#9679;</span> <span class="c-gold">&#9733; </span>payment-service</div>
+            <div class="trow">    <span class="c-yellow">&#9208;</span> legacy-report-sync</div>
+            <div class="trow">    <span class="c-muted">&#9675;</span> sandbox-experiments</div>
+            <div class="trow hide-sm"><b>&#9656; infrastructure</b><span class="c-muted"> (7)</span></div>
+            <div class="trow hide-sm"><b>&#9656; data</b><span class="c-muted"> (6)</span></div>
+            <div class="trow hide-sm"><b>&#9656; mobile</b><span class="c-muted"> (5)</span></div>
+            <div class="trow hide-sm"><b>&#9656; platform</b><span class="c-muted"> (3)</span></div>
+          </fieldset>
+          <div class="t-right">
+            <fieldset class="t-panel">
+              <legend>History: web-app-build</legend>
+              <div class="hrow hhead"><span>Run</span><span>When</span><span>Status</span><span>Trigger</span></div>
+              <div class="hrow is-selected"><span>&#9654; #482</span><span>2026-08-21 14:32:07</span><span class="c-yellow">Building</span><span>modified by alex</span></div>
+              <div class="hrow"><span>  #481</span><span>2026-08-21 11:04:53</span><span class="c-green">Passed</span><span>modified by priya</span></div>
+              <div class="hrow"><span>  #480</span><span>2026-08-20 18:26:11</span><span class="c-green">Passed</span><span>forced by sam</span></div>
+              <div class="hrow hide-sm"><span>  #479</span><span>2026-08-20 15:40:02</span><span class="c-red">Failed</span><span>modified by alex</span></div>
+              <div class="hrow hide-sm"><span>  #478</span><span>2026-08-20 09:12:44</span><span class="c-green">Passed</span><span>modified by jordan</span></div>
+            </fieldset>
+            <fieldset class="t-panel">
+              <legend>Details</legend>
+              <div class="drow"><span class="c-muted">Run </span>#482</div>
+              <div class="drow"><span class="c-muted">Started: </span>2026-08-21 14:32:07</div>
+              <div class="drow"><span class="c-muted">Commit: </span><span class="c-cyan">4f9c2e1</span>  fix: retry flaky upload step</div>
+              <div class="drow hide-sm"><span class="c-muted">Author: </span>alex</div>
+              <div class="drow sp"></div>
+              <div class="drow"><span class="c-cyan">&#9654; </span><b>build</b>  <span class="c-yellow">Building</span><span class="c-muted">  (success)  2026-08-21 14:32:07</span></div>
+              <div class="drow">    compile      <span class="c-green">Passed</span></div>
+              <div class="drow">    unit-tests   <span class="c-yellow">Building</span></div>
+              <div class="drow"><span class="c-muted">&#9656; </span><b>deploy</b>  <span class="c-muted">Unknown  (manual)</span></div>
+              <div class="drow sp"></div>
+              <div class="drow"><span class="c-muted">GitHub: </span>acme/web-app@main</div>
+              <div class="drow"><span class="c-muted">Deployed: </span>4f9c2e1  <span class="c-green">&#10003; up to date</span></div>
+            </fieldset>
+          </div>
+        </div>
+        <div class="t-foot"><span><b>j/k</b> move</span><span><b>g/G</b> top/bottom</span><span><b>enter</b> open</span><span><b>h</b> collapse</span><span><b>t</b> trigger</span><span><b>p</b> pause</span><span><b>f</b> favorite</span><span><b>/</b> filter</span><span><b>r</b> refresh</span><span><b>A</b> gocd</span><span><b>@</b> github</span><span><b>?</b> help</span><span><b>q</b> quit</span></div>
+      </div>
+    </figure>
+  </div>
+
+  <!-- ================= demo video slot ================= -->
+  <!-- ============================================================
+       DEMO VIDEO / GIF SLOT
+       When a recording exists, replace the .demo-placeholder <div>
+       below with one of:
+
+         <video src="/demo.mp4" controls muted loop playsinline
+                style="border-radius:14px;border:1px solid var(--border-bright)"></video>
+
+         <img src="/demo.gif" alt="lazygocd demo recording"
+              style="border-radius:14px;border:1px solid var(--border-bright)">
+
+       Keep the surrounding <section> and .demo-shell wrapper.
+       ============================================================ -->
+  <section>
+    <div class="wrap">
+      <div class="demo-shell">
+        <video src="/demo.mp4" controls muted loop playsinline
+               poster="/demo-poster.png"
+               style="width:100%;border-radius:14px;border:1px solid var(--border-bright)"></video>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= features ================= -->
+  <section id="features">
+    <div class="wrap">
+      <h2>Built for big fleets and small patience</h2>
+      <p class="sec-lede">Everything you reach for during a deploy, without a browser tab. The conventions you already know from modern terminal tools: rounded panels, semantic colors, footer key hints, a status LED next to the server URL.</p>
+      <div class="feature-grid">
+        <article class="fcard">
+          <div class="glyphs"><span class="glyph">0ms</span></div>
+          <h3>Instant startup</h3>
+          <p>The dashboard is cached to disk after every load. The next launch paints your fleet immediately, marked <code>cached, refreshing...</code>, while a fresh load runs in the background.</p>
+        </article>
+        <article class="fcard">
+          <div class="glyphs"><span class="glyph">/</span></div>
+          <h3>Fuzzy filter</h3>
+          <p>One keystroke filters thousands of pipelines across every group, collapsed or not, with matched characters highlighted as you type.</p>
+        </article>
+        <article class="fcard">
+          <div class="glyphs"><span class="glyph">&#9639;</span></div>
+          <h3>Live console logs</h3>
+          <p>Open any job's raw log in a full-screen view. It tails itself every ~3s while the stage runs and stops on its own once it finishes.</p>
+        </article>
+        <article class="fcard">
+          <div class="glyphs"><span class="glyph">t</span><span class="glyph">p</span><span class="glyph">X</span></div>
+          <h3>Trigger, pause, cancel</h3>
+          <p>Run control from the keyboard, each behind a confirm prompt. Cancel stops a build already in flight, which pause can't do.</p>
+        </article>
+        <article class="fcard">
+          <div class="glyphs"><span class="glyph">@</span></div>
+          <h3>Deployed-commit check</h3>
+          <p>The Details panel compares the deployed commit against the latest on the branch: <code>&#10003; up to date</code> or <code>&#9888; not latest</code>. Token optional, only needed for private repos.</p>
+        </article>
+        <article class="fcard">
+          <div class="glyphs"><span class="glyph gold">&#9733;</span></div>
+          <h3>Favorites</h3>
+          <p>Star pipelines to pin them in a gold Favorites section at the top of the tree, expanded by default and saved across sessions.</p>
+        </article>
+        <article class="fcard">
+          <div class="glyphs"><span class="glyph">&#8645;</span></div>
+          <h3>Full mouse support</h3>
+          <p>Click to focus a pane and select a row, click the selected row again to open it, and scroll whatever pane is under the cursor.</p>
+        </article>
+        <article class="fcard">
+          <div class="glyphs"><span class="glyph">30s</span></div>
+          <h3>Auto-refresh</h3>
+          <p>The dashboard and the open pipeline's history silently re-poll every 30 seconds (configurable). No <code>r</code> mashing during a deploy.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= numbers ================= -->
+  <section>
+    <div class="wrap">
+      <h2>Measured on a real fleet</h2>
+      <p class="sec-lede">Verified against a GoCD 23.5.0 instance with 185 pipeline groups and 2,389 pipelines. One gzipped call to <code>/api/dashboard</code> loads the whole tree, pause states, and latest-run statuses.</p>
+      <div class="stats-strip">
+        <div class="stat"><div class="num">5.3&nbsp;MB &rarr; 165&nbsp;KB</div><div class="lbl">dashboard payload with gzip</div></div>
+        <div class="stat"><div class="num">~20s &rarr; 2&ndash;4s</div><div class="lbl">cold load, 2,389 pipelines</div></div>
+        <div class="stat"><div class="num">0 network calls</div><div class="lbl">to first paint, via the disk cache</div></div>
+        <div class="stat"><div class="num">40&nbsp;ms</div><div class="lbl">input poll, so keys land instantly</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= install teaser ================= -->
+  <section>
+    <div class="wrap">
+      <h2>Get it running in a minute</h2>
+      <p class="sec-lede">Install with Homebrew, run <code>lazygocd</code>, and the first-run form walks you through connecting. Config lands in <code>~/.config/lazygocd/config.toml</code> with owner-only permissions.</p>
+      <fieldset class="panel accent" style="max-width:640px">
+        <legend>install</legend>
+        <div class="cmd" style="margin-bottom:10px">
+          <pre><code><span class="ps1">$ </span>brew install Sahilll15/tap/lazygocd
+<span class="ps1">$ </span>lazygocd</code></pre>
+          <button class="copy-btn" type="button" aria-label="Copy install commands">copy</button>
+        </div>
+        <p class="small" style="margin:0">Prefer cargo or a prebuilt binary? See <a href="/install">all install options</a>, then the <a href="/quickstart">quickstart</a>.</p>
+      </fieldset>
+    </div>
+  </section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="tui-strip" aria-hidden="true">
+    <div class="wrap"><span><b>j/k</b> move</span><span><b>enter</b> open</span><span><b>t</b> trigger</span><span><b>p</b> pause</span><span><b>f</b> favorite</span><span><b>/</b> filter</span><span><b>X</b> cancel</span><span><b>A</b> gocd</span><span><b>@</b> github</span><span><b>?</b> help</span><span><b>q</b> quit</span></div>
+  </div>
+  <div class="wrap foot-row">
+    <div class="foot-left"><span class="brand-badge sm">lazygocd</span><span>MIT license</span></div>
+    <div class="foot-links">
+      <a href="https://github.com/Sahilll15/lazygocd">source &nearr;</a>
+      <a href="https://github.com/Sahilll15/lazygocd/issues">issues &nearr;</a>
+      <a href="https://www.gocd.org/">GoCD &nearr;</a>
+      <a href="https://ratatui.rs/">ratatui &nearr;</a>
+    </div>
+  </div>
+</footer>
+
+<script src="/site.js"></script>
+</body>
+</html>

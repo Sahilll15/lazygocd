@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quickstart — lazygocd</title>
+<meta name="description" content="Connect lazygocd to your GoCD server: the first-run form, where config is stored, and the environment variable overrides.">
+<meta name="theme-color" content="#0a0f14">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='2' y='2' width='60' height='60' rx='14' fill='%230b1117' stroke='%233fd5e6' stroke-width='4'/%3E%3Cpath d='M17 23l11 9-11 9' fill='none' stroke='%233fd5e6' stroke-width='6' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M33 41h13' stroke='%233fd5e6' stroke-width='6' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap header-row">
+    <a class="brand" href="/" aria-label="lazygocd home">
+      <span class="brand-badge">lazygocd</span><span class="led" aria-hidden="true"></span>
+    </a>
+    <button class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+    <nav class="site-nav" id="site-nav" aria-label="Site">
+      <a href="/install">install</a>
+      <a href="/quickstart" class="active">quickstart</a>
+      <a href="/keybindings">keybindings</a>
+      <a href="/features">features</a>
+      <a href="/changelog">changelog</a>
+      <a href="/troubleshooting">troubleshooting</a>
+      <a class="nav-gh" href="https://github.com/Sahilll15/lazygocd">GitHub &nearr;</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div class="page-hero wrap">
+    <div class="crumb"><span class="tilde">~</span>/lazygocd/quickstart</div>
+    <h1>Quickstart</h1>
+    <p class="lede">There is no setup wizard outside the app. Run <code>lazygocd</code> and the connect form opens right in the terminal, walks you through four inputs, and drops you into the dashboard.</p>
+  </div>
+
+  <section>
+    <div class="wrap">
+      <h2>First run: the connect form</h2>
+      <div style="display:grid;grid-template-columns:1fr;gap:34px;max-width:920px">
+        <ol class="steps">
+          <li>
+            <h3>Server URL</h3>
+            <p>Your GoCD base URL including the <code>/go</code> path, for example <code>https://gocd.example.com/go</code>, with no trailing slash.</p>
+          </li>
+          <li>
+            <h3>Auth method</h3>
+            <p>An arrow-key choice between username &amp; password and an access token. Tokens are recommended; create one in GoCD under your user's Access Tokens page.</p>
+          </li>
+          <li>
+            <h3>Credential</h3>
+            <p>The token or password, typed masked. If your server has no auth at all, leave the username blank.</p>
+          </li>
+          <li>
+            <h3>TLS choice</h3>
+            <p>Whether to skip TLS certificate verification. Say no unless the server uses a self-signed certificate you trust.</p>
+          </li>
+          <li>
+            <h3>Done</h3>
+            <p>On confirm it saves the config and loads straight into the dashboard. Press <kbd>A</kbd> any time later to reopen the same form as "Reconnect to GoCD", for example after a token expires.</p>
+          </li>
+        </ol>
+
+        <figure class="term" style="margin:0;max-width:560px" role="img" aria-label="The lazygocd connect form, showing a confirmed server and auth method with a masked access token being entered.">
+          <div class="term-chrome">
+            <span class="tdot td-r"></span><span class="tdot td-y"></span><span class="tdot td-g"></span>
+            <span class="term-title">first run</span>
+          </div>
+          <div class="term-screen" style="font-size:12.5px">
+            <fieldset class="t-panel is-focused" style="margin:6px 4px 8px">
+              <legend>Connect to GoCD</legend>
+              <div class="drow"><span class="c-green">&#10003; </span><span class="c-muted">Server: </span>https://gocd.example.com/go</div>
+              <div class="drow"><span class="c-green">&#10003; </span><span class="c-muted">Method: </span>Access token</div>
+              <div class="drow sp"></div>
+              <div class="drow"><b>Access token</b></div>
+              <div class="drow sp"></div>
+              <div class="drow"><span class="c-cyan">&gt; &#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;</span></div>
+              <div class="drow sp"></div>
+              <div class="drow"><span class="c-muted">enter confirm   esc cancel</span></div>
+            </fieldset>
+          </div>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <h2>Where config lives</h2>
+      <p class="sec-lede">Everything is written under <code>~/.config/lazygocd/</code>. The config file is saved with mode <code>0600</code> because it holds a plaintext credential.</p>
+      <div style="max-width:760px">
+        <fieldset class="panel">
+          <legend>~/.config/lazygocd/config.toml</legend>
+          <div class="cmd" style="margin-bottom:0;border:none;padding-left:4px;background:transparent">
+            <pre><code><span class="key">server_url</span> = <span class="str">"https://gocd.example.com/go"</span>
+
+<span class="cmt"># one of the two auth styles:</span>
+<span class="key">auth_token</span> = <span class="str">"your-access-token"</span>          <span class="cmt"># recommended</span>
+<span class="cmt"># username = "ci-viewer"</span>
+<span class="cmt"># password = "..."</span>
+
+<span class="key">insecure_skip_verify</span> = <span class="str">false</span>              <span class="cmt"># true only for self-signed certs</span>
+<span class="key">poll_interval_secs</span> = <span class="str">30</span>                    <span class="cmt"># dashboard/history auto-refresh</span>
+
+<span class="cmt"># optional: only needed to check private repos' latest commit</span>
+<span class="cmt"># github_token = "ghp_..."  (optional: gh auth token is used automatically if unset)</span>
+<span class="cmt"># github_api_base = "https://ghe.example.com/api/v3"  (GitHub Enterprise)</span>
+<span class="cmt"># notifications = true  (desktop alerts when a favorite starts failing)</span></code></pre>
+            <button class="copy-btn" type="button" aria-label="Copy example config">copy</button>
+          </div>
+        </fieldset>
+
+        <div class="tblwrap">
+          <table class="tbl">
+            <thead><tr><th>File</th><th>What it holds</th></tr></thead>
+            <tbody>
+              <tr><td><code>config.toml</code></td><td>Server URL, credentials, TLS choice, poll interval, optional GitHub token. Mode <code>0600</code>.</td></tr>
+              <tr><td><code>dashboard_cache.json</code></td><td>The last successful dashboard load, so the next launch paints instantly. Safe to delete.</td></tr>
+              <tr><td><code>favorites.json</code></td><td>Names of starred pipelines, pinned to the top of the tree.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <h2>Environment variable overrides</h2>
+      <p class="sec-lede">Env vars always win over the config file. Handy for scripting, CI, or trying a second server without touching your saved config. Setting a full set (URL plus a credential) skips the connect form entirely.</p>
+      <div class="tblwrap" style="max-width:820px">
+        <table class="tbl">
+          <thead><tr><th>Variable</th><th>Overrides</th></tr></thead>
+          <tbody>
+            <tr><td><code>GOCD_URL</code></td><td>Server base URL, e.g. <code>https://gocd.example.com/go</code></td></tr>
+            <tr><td><code>GOCD_USERNAME</code></td><td>Username for basic auth</td></tr>
+            <tr><td><code>GOCD_PASSWORD</code></td><td>Password for basic auth</td></tr>
+            <tr><td><code>GOCD_TOKEN</code></td><td>Access token; used instead of username/password when set</td></tr>
+            <tr><td><code>GOCD_INSECURE</code></td><td>Any value skips TLS certificate verification (e.g. <code>GOCD_INSECURE=1</code>)</td></tr>
+            <tr><td><code>GITHUB_TOKEN</code></td><td>GitHub personal access token for private-repo commit checks</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="cmd" style="max-width:820px">
+        <pre><code><span class="cmt"># one-shot session against a different server, config file untouched</span>
+<span class="ps1">$ </span>GOCD_URL=https://gocd.example.com/go GOCD_TOKEN=your-token lazygocd</code></pre>
+        <button class="copy-btn" type="button" aria-label="Copy env var example">copy</button>
+      </div>
+      <div class="callout" style="max-width:820px">
+        <span class="co-label">tip</span>
+        Press <kbd>@</kbd> inside the app to connect a GitHub token interactively instead of exporting <code>GITHUB_TOKEN</code>. It's optional either way; public repos are checked unauthenticated (rate-limited).
+      </div>
+      <div class="next-links">
+        <a class="btn btn-primary" href="/keybindings">Learn the keys</a>
+        <a class="btn btn-ghost" href="/features">How it stays fast</a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="tui-strip" aria-hidden="true">
+    <div class="wrap"><span><b>j/k</b> move</span><span><b>enter</b> open</span><span><b>t</b> trigger</span><span><b>p</b> pause</span><span><b>f</b> favorite</span><span><b>/</b> filter</span><span><b>X</b> cancel</span><span><b>A</b> gocd</span><span><b>@</b> github</span><span><b>?</b> help</span><span><b>q</b> quit</span></div>
+  </div>
+  <div class="wrap foot-row">
+    <div class="foot-left"><span class="brand-badge sm">lazygocd</span><span>MIT license</span></div>
+    <div class="foot-links">
+      <a href="https://github.com/Sahilll15/lazygocd">source &nearr;</a>
+      <a href="https://github.com/Sahilll15/lazygocd/issues">issues &nearr;</a>
+      <a href="https://www.gocd.org/">GoCD &nearr;</a>
+      <a href="https://ratatui.rs/">ratatui &nearr;</a>
+    </div>
+  </div>
+</footer>
+
+<script src="/site.js"></script>
+</body>
+</html>
