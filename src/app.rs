@@ -1,7 +1,7 @@
 use crate::api::GoCdClient;
 use crate::config::Config;
 use crate::github::GitHubClient;
-use crate::model::{ArtifactNode, DashboardGroup, DashboardPipeline, GitRef, PipelineInstance, flatten_artifacts};
+use crate::model::{ArtifactNode, DashboardGroup, DashboardPipeline, GitRef, PipelineInstance, ViewFilter, flatten_artifacts};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use ratatui::layout::Rect;
 use ratatui::widgets::{ListState, TableState};
@@ -176,6 +176,10 @@ pub enum Modal {
     GithubConnect { input: String },
     TriggerVars(TriggerVarsForm),
     ConsoleLog(Box<ConsoleLogState>),
+    /// Personalized-view picker; index 0 = "All pipelines", then one per view.
+    ViewPicker { selected: usize },
+    /// Name input for saving the current fuzzy-filter matches as a new view.
+    SaveView { input: String, pipelines: Vec<String> },
 }
 
 #[derive(Debug, Clone)]
@@ -225,6 +229,8 @@ pub enum ApiEvent {
     /// usize = the 0-based line this fetch started from (0 = full log).
     ConsoleLog(JobRef, usize, Result<String, String>),
     Artifacts(JobRef, Result<Vec<ArtifactNode>, String>),
+    Views(u64, Result<Vec<ViewFilter>, String>),
+    ViewSaved(u64, Result<String, String>),
 }
 
 pub struct App {
@@ -237,6 +243,11 @@ pub struct App {
     pub groups: Vec<DashboardGroup>,
     pub expanded: HashSet<String>,
     pub pipeline_info: HashMap<String, DashboardPipeline>,
+
+    /// Personalized dashboard views from the server; active_view indexes into
+    /// it and filters the whole tree.
+    pub views: Vec<ViewFilter>,
+    pub active_view: Option<usize>,
 
     /// Starred pipeline names, pinned to a section at the top of the tree.
     pub favorites: HashSet<String>,
@@ -387,6 +398,8 @@ impl App {
             // of pipelines, so eagerly expanding everything would be unusable. Use `/` to filter.
             expanded: HashSet::new(),
             pipeline_info,
+            views: Vec::new(),
+            active_view: None,
             favorites: load_favorites(),
             favorites_expanded: true,
             filter: String::new(),
@@ -435,14 +448,25 @@ impl App {
 
     // ---- background dispatch ----
 
+    fn spawn_load_views(&self) {
+        let client = self.client.clone();
+        let tx = self.tx.clone();
+        let generation = self.server_gen;
+        thread::spawn(move || {
+            let result = client.fetch_views().map(|(v, _)| v.filters).map_err(|e| format!("{e:#}"));
+            let _ = tx.send(ApiEvent::Views(generation, result));
+        });
+    }
+
     fn spawn_load_dashboard(&self) {
         let client = self.client.clone();
         let tx = self.tx.clone();
         let generation = self.server_gen;
         let etag = self.dashboard_etag.clone();
+        let view = self.active_view.and_then(|i| self.views.get(i)).map(|v| v.name.clone());
         thread::spawn(move || {
             let result = client
-                .fetch_dashboard(etag.as_deref())
+                .fetch_dashboard(etag.as_deref(), view.as_deref())
                 .map(|opt| opt.map(|(d, tag)| (d.pipeline_groups, d.pipelines, tag)))
                 .map_err(|e| format!("{e:#}"));
             let _ = tx.send(ApiEvent::Dashboard(generation, result));
@@ -581,7 +605,30 @@ impl App {
                 // 304: nothing changed server-side; keep everything as is.
                 self.loading_groups = false;
             }
+            ApiEvent::ViewSaved(generation, result) => {
+                if generation == self.server_gen {
+                    match result {
+                        Ok(name) => {
+                            self.status_line = format!("Saved view '{name}' (visible in the GoCD web UI too)");
+                            self.spawn_load_views();
+                        }
+                        Err(e) => self.error_line = Some(format!("Saving view failed: {e}")),
+                    }
+                }
+            }
+            ApiEvent::Views(generation, result) => {
+                if generation == self.server_gen
+                    && let Ok(mut filters) = result
+                {
+                    // Default is GoCD's implicit everything-view; the picker has "All" for that.
+                    filters.retain(|f| f.name != "Default");
+                    self.views = filters;
+                }
+            }
             ApiEvent::Dashboard(_, Ok(Some((groups, pipelines, etag)))) => {
+                if self.views.is_empty() {
+                    self.spawn_load_views();
+                }
                 self.dashboard_etag = etag;
                 self.status_line = format!("Loaded {} group(s), {} pipeline(s)", groups.len(), pipelines.len());
                 // A successful load means connectivity is back: drop any stale network
@@ -819,6 +866,31 @@ impl App {
             KeyCode::Char('f') => self.toggle_favorite(),
             KeyCode::Char('o') => self.open_in_browser(),
             KeyCode::Char('y') => self.copy_selected(),
+            KeyCode::Char('V') => {
+                if self.filter.is_empty() {
+                    self.status_line = "Filter first (/), then V saves the matches as a GoCD view".to_string();
+                } else {
+                    let pipelines: Vec<String> = self
+                        .groups
+                        .iter()
+                        .flat_map(|g| g.pipelines.iter())
+                        .filter(|name| fuzzy_match(name, &self.filter).is_some())
+                        .cloned()
+                        .collect();
+                    if pipelines.is_empty() {
+                        self.status_line = "No pipelines match the current filter".to_string();
+                    } else {
+                        self.modal = Some(Modal::SaveView { input: String::new(), pipelines });
+                    }
+                }
+            }
+            KeyCode::Char('v') => {
+                if self.views.is_empty() {
+                    self.status_line = "No personalized views on this server (create them in the GoCD dashboard)".to_string();
+                } else {
+                    self.modal = Some(Modal::ViewPicker { selected: self.active_view.map_or(0, |i| i + 1) });
+                }
+            }
             KeyCode::Char('A') => {
                 self.modal = Some(Modal::Reauth(ReauthForm::new(ReauthMode::Reconnect, &self.server_url)))
             }
@@ -899,6 +971,8 @@ impl App {
             Modal::Reauth(form) => self.handle_reauth_key(key, form),
             Modal::GithubConnect { input } => self.handle_github_connect_key(key, input),
             Modal::TriggerVars(form) => self.handle_trigger_vars_key(key, form),
+            Modal::ViewPicker { selected } => self.handle_view_picker_key(key, selected),
+            Modal::SaveView { input, pipelines } => self.handle_save_view_key(key, input, pipelines),
             Modal::ConsoleLog(state) => self.handle_console_log_key(key, *state),
         }
     }
@@ -1223,6 +1297,8 @@ impl App {
                 self.status_line = "Reconnecting...".to_string();
                 self.server_gen += 1;
                 self.dashboard_etag = None;
+                self.views.clear();
+                self.active_view = None;
                 self.groups.clear();
                 self.pipeline_info.clear();
                 self.rows.clear();
@@ -1961,6 +2037,69 @@ impl App {
         if let Some(pos) = pos {
             self.selected = pos;
         }
+    }
+
+    fn handle_save_view_key(&mut self, key: KeyEvent, mut input: String, pipelines: Vec<String>) {
+        match key.code {
+            KeyCode::Esc => {
+                self.modal = None;
+                return;
+            }
+            KeyCode::Backspace => {
+                input.pop();
+            }
+            KeyCode::Char(c) => input.push(c),
+            KeyCode::Enter => {
+                let name = input.trim().to_string();
+                if name.is_empty() {
+                    return;
+                }
+                self.modal = None;
+                self.status_line = format!("Saving view '{name}' ({} pipelines)...", pipelines.len());
+                let client = self.client.clone();
+                let tx = self.tx.clone();
+                let generation = self.server_gen;
+                thread::spawn(move || {
+                    let result = client
+                        .save_view(&name, pipelines)
+                        .map(|_| name)
+                        .map_err(|e| format!("{e:#}"));
+                    let _ = tx.send(ApiEvent::ViewSaved(generation, result));
+                });
+                return;
+            }
+            _ => {}
+        }
+        self.modal = Some(Modal::SaveView { input, pipelines });
+    }
+
+    fn handle_view_picker_key(&mut self, key: KeyEvent, mut selected: usize) {
+        let count = self.views.len() + 1; // slot 0 = All pipelines
+        match key.code {
+            KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('v') => {
+                self.modal = None;
+                return;
+            }
+            KeyCode::Up | KeyCode::Char('k') => selected = selected.saturating_sub(1),
+            KeyCode::Down | KeyCode::Char('j') => selected = (selected + 1).min(count - 1),
+            KeyCode::Enter => {
+                self.active_view = (selected > 0).then(|| selected - 1);
+                self.modal = None;
+                self.status_line = match self.active_view {
+                    Some(i) => format!("Loading view: {}...", self.views[i].name),
+                    None => "Loading all pipelines...".to_string(),
+                };
+                // Views are server-side filters (the bare dashboard already has the
+                // user's Default view applied), so switching means refetching.
+                self.dashboard_etag = None;
+                self.loading_groups = true;
+                self.selected = 0;
+                self.spawn_load_dashboard();
+                return;
+            }
+            _ => {}
+        }
+        self.modal = Some(Modal::ViewPicker { selected });
     }
 
     pub fn rebuild_rows(&mut self) {

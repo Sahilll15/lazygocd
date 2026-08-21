@@ -95,6 +95,8 @@ Env vars override the config for scripting: `GOCD_URL`, `GOCD_USERNAME`, `GOCD_P
 | `T` | trigger with environment variables — type `NAME=VALUE` entries, an empty entry finishes |
 | `p` | pause/unpause (confirm) |
 | `f` | star/unstar as favorite |
+| `v` | switch personalized dashboard view (your GoCD web-UI tabs) |
+| `V` | save the current filter matches as a new GoCD view |
 | `y` | copy: commit SHA (history/details), pipeline/group name (tree), artifact URL (job view) |
 | `X` | cancel the currently running stage (confirm) |
 | `R` | rerun the failed jobs of the selected run's failed stage (`a` in the confirm reruns the whole stage) |
