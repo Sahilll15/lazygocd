@@ -1,6 +1,32 @@
 {
-  "cleanUrls": true,
+  "cleanUrls": false,
   "trailingSlash": false,
+  "rewrites": [
+    {
+      "source": "/install",
+      "destination": "/install.html"
+    },
+    {
+      "source": "/quickstart",
+      "destination": "/quickstart.html"
+    },
+    {
+      "source": "/keybindings",
+      "destination": "/keybindings.html"
+    },
+    {
+      "source": "/features",
+      "destination": "/features.html"
+    },
+    {
+      "source": "/changelog",
+      "destination": "/changelog.html"
+    },
+    {
+      "source": "/troubleshooting",
+      "destination": "/troubleshooting.html"
+    }
+  ],
   "headers": [
     {
       "source": "/(.*)",
