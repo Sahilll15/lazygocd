@@ -65,19 +65,30 @@ impl GoCdClient {
     /// One call returns pipeline groups, membership, pause state, and latest-run
     /// status for every pipeline the user can see. Accept v4, verified against a
     /// real GoCD 23.5.0 instance; per-pipeline status polling doesn't scale.
-    pub fn fetch_dashboard(&self) -> Result<DashboardEmbedded> {
-        let resp = self
-            .request(Method::GET, "/api/dashboard", 4)
-            .send()
-            .context("requesting dashboard")?;
+    /// Pass the previous ETag to let the server answer 304 (returns Ok(None)),
+    /// which skips the multi-MB payload on unchanged polls.
+    pub fn fetch_dashboard(&self, etag: Option<&str>) -> Result<Option<(DashboardEmbedded, Option<String>)>> {
+        let mut rb = self.request(Method::GET, "/api/dashboard", 4);
+        if let Some(tag) = etag {
+            rb = rb.header("If-None-Match", tag);
+        }
+        let resp = rb.send().context("requesting dashboard")?;
         let status = resp.status();
+        if status == reqwest::StatusCode::NOT_MODIFIED {
+            return Ok(None);
+        }
+        let new_etag = resp
+            .headers()
+            .get(reqwest::header::ETAG)
+            .and_then(|v| v.to_str().ok())
+            .map(str::to_string);
         let body = resp.text().context("reading dashboard response body")?;
         if !status.is_success() {
             anyhow::bail!("GoCD returned {status} for dashboard: {}", truncate(&body));
         }
         let parsed: DashboardResponse = serde_json::from_str(&body)
             .with_context(|| format!("parsing dashboard response: {}", truncate(&body)))?;
-        Ok(parsed.embedded)
+        Ok(Some((parsed.embedded, new_etag)))
     }
 
     pub fn fetch_history(&self, pipeline_name: &str) -> Result<Vec<PipelineInstance>> {
@@ -182,6 +193,8 @@ impl GoCdClient {
 
     /// Raw job console output. Not part of the versioned JSON API - a plain
     /// text file server endpoint, works while the job is still running too.
+    /// `start_line` is 0-based; nonzero returns only lines from there on, so
+    /// tail-follow appends instead of re-downloading the whole log.
     pub fn fetch_console_log(
         &self,
         pipeline_name: &str,
@@ -189,10 +202,14 @@ impl GoCdClient {
         stage_name: &str,
         stage_counter: &str,
         job_name: &str,
+        start_line: usize,
     ) -> Result<String> {
-        let path = format!(
+        let mut path = format!(
             "/files/{pipeline_name}/{pipeline_counter}/{stage_name}/{stage_counter}/{job_name}/cruise-output/console.log"
         );
+        if start_line > 0 {
+            path.push_str(&format!("?startLineNumber={start_line}"));
+        }
         let resp = self.request_raw(Method::GET, &path).send().context("requesting console log")?;
         let status = resp.status();
         let body = resp.text().context("reading console log body")?;

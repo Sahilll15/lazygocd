@@ -186,12 +186,17 @@ enum SelectionKey {
     Pipeline(String),
 }
 
+/// Fresh dashboard payload: groups, pipelines, and the response's ETag.
+pub type DashboardPayload = (Vec<DashboardGroup>, Vec<DashboardPipeline>, Option<String>);
+
 pub enum ApiEvent {
-    Dashboard(u64, Result<(Vec<DashboardGroup>, Vec<DashboardPipeline>), String>),
+    /// None payload = HTTP 304, nothing changed since the ETag we sent.
+    Dashboard(u64, Result<Option<DashboardPayload>, String>),
     History(String, Result<Vec<PipelineInstance>, String>),
     ActionDone(PendingAction, Result<String, String>),
     GithubLatest(String, Result<String, String>),
-    ConsoleLog(JobRef, Result<String, String>),
+    /// usize = the 0-based line this fetch started from (0 = full log).
+    ConsoleLog(JobRef, usize, Result<String, String>),
     Artifacts(JobRef, Result<Vec<ArtifactNode>, String>),
 }
 
@@ -253,6 +258,8 @@ pub struct App {
     /// Bumped on reconnect; in-flight responses from a previous server are
     /// dropped when their generation doesn't match.
     pub server_gen: u64,
+    /// Last dashboard ETag; sent as If-None-Match so unchanged polls cost 304+0 bytes.
+    pub dashboard_etag: Option<String>,
 
     pub loading_groups: bool,
     pub status_line: String,
@@ -373,6 +380,7 @@ impl App {
             github_ref: None,
             github_state: GithubState::Idle,
             server_gen: 0,
+            dashboard_etag: None,
             loading_groups: !needs_setup && !has_cache,
             status_line,
             error_line: None,
@@ -395,10 +403,11 @@ impl App {
         let client = self.client.clone();
         let tx = self.tx.clone();
         let generation = self.server_gen;
+        let etag = self.dashboard_etag.clone();
         thread::spawn(move || {
             let result = client
-                .fetch_dashboard()
-                .map(|d| (d.pipeline_groups, d.pipelines))
+                .fetch_dashboard(etag.as_deref())
+                .map(|opt| opt.map(|(d, tag)| (d.pipeline_groups, d.pipelines, tag)))
                 .map_err(|e| format!("{e:#}"));
             let _ = tx.send(ApiEvent::Dashboard(generation, result));
         });
@@ -436,13 +445,24 @@ impl App {
     }
 
     fn spawn_console_fetch(&self, job_ref: JobRef) {
+        self.spawn_console_fetch_from(job_ref, 0);
+    }
+
+    fn spawn_console_fetch_from(&self, job_ref: JobRef, start_line: usize) {
         let client = self.client.clone();
         let tx = self.tx.clone();
         thread::spawn(move || {
             let result = client
-                .fetch_console_log(&job_ref.pipeline, job_ref.pipeline_counter, &job_ref.stage, &job_ref.stage_counter, &job_ref.job)
+                .fetch_console_log(
+                    &job_ref.pipeline,
+                    job_ref.pipeline_counter,
+                    &job_ref.stage,
+                    &job_ref.stage_counter,
+                    &job_ref.job,
+                    start_line,
+                )
                 .map_err(|e| format!("{e:#}"));
-            let _ = tx.send(ApiEvent::ConsoleLog(job_ref, result));
+            let _ = tx.send(ApiEvent::ConsoleLog(job_ref, start_line, result));
         });
     }
 
@@ -471,7 +491,12 @@ impl App {
             ApiEvent::Dashboard(generation, _) if generation != self.server_gen => {
                 // Stale response from before a reconnect - a different server's data.
             }
-            ApiEvent::Dashboard(_, Ok((groups, pipelines))) => {
+            ApiEvent::Dashboard(_, Ok(None)) => {
+                // 304: nothing changed server-side; keep everything as is.
+                self.loading_groups = false;
+            }
+            ApiEvent::Dashboard(_, Ok(Some((groups, pipelines, etag)))) => {
+                self.dashboard_etag = etag;
                 self.status_line = format!("Loaded {} group(s), {} pipeline(s)", groups.len(), pipelines.len());
                 // A successful load means connectivity is back: drop any stale network
                 // error banner instead of leaving it until the next keypress.
@@ -558,14 +583,22 @@ impl App {
                     };
                 }
             }
-            ApiEvent::ConsoleLog(job_ref, result) => {
+            ApiEvent::ConsoleLog(job_ref, start_line, result) => {
                 if let Some(Modal::ConsoleLog(state)) = &mut self.modal
                     && state.job_ref == job_ref
                 {
                     state.loading = false;
                     match result {
                         Ok(text) => {
-                            state.lines = text.lines().map(str::to_string).collect();
+                            if start_line == 0 {
+                                state.lines = text.lines().map(str::to_string).collect();
+                            } else if start_line == state.lines.len() {
+                                state.lines.extend(text.lines().map(str::to_string));
+                            } else {
+                                // Line count moved since this fetch was issued (e.g. a manual
+                                // full refresh landed in between) - drop the stale delta.
+                                return;
+                            }
                             state.error = None;
                             state.recompute_matches();
                             if state.following {
@@ -636,6 +669,7 @@ impl App {
             KeyCode::Char('X') => self.request_cancel(),
             KeyCode::Char('f') => self.toggle_favorite(),
             KeyCode::Char('o') => self.open_in_browser(),
+            KeyCode::Char('y') => self.copy_selected(),
             KeyCode::Char('A') => {
                 self.modal = Some(Modal::Reauth(ReauthForm::new(ReauthMode::Reconnect, &self.server_url)))
             }
@@ -808,6 +842,16 @@ impl App {
                 }
                 _ => state.scroll = state.scroll.saturating_add(1),
             },
+            KeyCode::Char('y') if state.tab == JobTab::Artifacts => {
+                if let Some((_, name, _, Some(url))) =
+                    state.artifacts.as_ref().and_then(|a| a.get(state.artifact_selected)).cloned()
+                {
+                    match copy_to_clipboard(&url) {
+                        Ok(()) => self.status_line = format!("Copied url for {name}"),
+                        Err(e) => self.error_line = Some(format!("Copy failed: {e}")),
+                    }
+                }
+            }
             KeyCode::Enter | KeyCode::Char('o') if state.tab == JobTab::Artifacts => {
                 if let Some((_, name, folder, Some(url))) =
                     state.artifacts.as_ref().and_then(|a| a.get(state.artifact_selected)).cloned()
@@ -963,6 +1007,7 @@ impl App {
                 }
                 self.status_line = "Reconnecting...".to_string();
                 self.server_gen += 1;
+                self.dashboard_etag = None;
                 self.groups.clear();
                 self.pipeline_info.clear();
                 self.rows.clear();
@@ -1136,7 +1181,11 @@ impl App {
             return;
         }
         self.last_console_poll = Instant::now();
-        self.spawn_console_fetch(job_ref);
+        let from = match &self.modal {
+            Some(Modal::ConsoleLog(s)) => s.lines.len(),
+            _ => 0,
+        };
+        self.spawn_console_fetch_from(job_ref, from);
     }
 
     /// True while anything on screen is animating (spinners); the main loop
@@ -1309,6 +1358,39 @@ impl App {
         }
         save_favorites(self.favorites.clone());
         self.rebuild_rows();
+    }
+
+    /// 'y': copy the most useful identifier for the current selection - the
+    /// run's full commit SHA in history/details, the pipeline or group name
+    /// in the tree.
+    fn copy_selected(&mut self) {
+        let (what, text) = match self.focus {
+            Focus::History | Focus::Detail => {
+                let Some(inst) = self.history.get(self.history_selected) else { return };
+                match inst.git_modification().and_then(|m| m.revision.clone()) {
+                    Some(sha) => ("commit sha", sha),
+                    None => ("run label", inst.label.clone()),
+                }
+            }
+            Focus::Groups => match self.rows.get(self.selected) {
+                Some(Row::Pipeline { group_idx, pipeline_idx }) => {
+                    let Some(name) = self.groups.get(*group_idx).and_then(|g| g.pipelines.get(*pipeline_idx)) else {
+                        return;
+                    };
+                    ("pipeline name", name.clone())
+                }
+                Some(Row::FavoritePipeline(name)) => ("pipeline name", name.clone()),
+                Some(Row::Group { idx }) => {
+                    let Some(g) = self.groups.get(*idx) else { return };
+                    ("group name", g.name.clone())
+                }
+                _ => return,
+            },
+        };
+        match copy_to_clipboard(&text) {
+            Ok(()) => self.status_line = format!("Copied {what}: {text}"),
+            Err(e) => self.error_line = Some(format!("Copy failed: {e}")),
+        }
     }
 
     /// 'o': open the relevant GitHub page for the selected run - the pending
@@ -1672,6 +1754,28 @@ pub fn fuzzy_match(haystack: &str, needle: &str) -> Option<Vec<usize>> {
         .collect()
 }
 
+/// OSC 52 clipboard write: works in modern terminals and over SSH, no native deps.
+fn copy_to_clipboard(text: &str) -> std::io::Result<()> {
+    use std::io::Write;
+    let mut out = std::io::stdout();
+    write!(out, "\x1b]52;c;{}\x07", base64(text.as_bytes()))?;
+    out.flush()
+}
+
+fn base64(data: &[u8]) -> String {
+    const TBL: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
+    for chunk in data.chunks(3) {
+        let b = [chunk[0], *chunk.get(1).unwrap_or(&0), *chunk.get(2).unwrap_or(&0)];
+        let n = (u32::from(b[0]) << 16) | (u32::from(b[1]) << 8) | u32::from(b[2]);
+        out.push(TBL[(n >> 18) as usize & 63] as char);
+        out.push(TBL[(n >> 12) as usize & 63] as char);
+        out.push(if chunk.len() > 1 { TBL[(n >> 6) as usize & 63] as char } else { '=' });
+        out.push(if chunk.len() > 2 { TBL[n as usize & 63] as char } else { '=' });
+    }
+    out
+}
+
 fn open_url(url: &str) -> std::io::Result<()> {
     #[cfg(target_os = "macos")]
     let mut cmd = std::process::Command::new("open");
@@ -1703,6 +1807,15 @@ fn format_age(saved_at_ms: i64) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn base64_rfc4648_vectors() {
+        assert_eq!(super::base64(b""), "");
+        assert_eq!(super::base64(b"f"), "Zg==");
+        assert_eq!(super::base64(b"fo"), "Zm8=");
+        assert_eq!(super::base64(b"foo"), "Zm9v");
+        assert_eq!(super::base64(b"foobar"), "Zm9vYmFy");
+    }
+
     use super::fuzzy_match;
 
     #[test]
