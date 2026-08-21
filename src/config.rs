@@ -77,7 +77,11 @@ pub fn config_dir() -> Result<PathBuf> {
     )
 }
 
-fn resolve_config_dir(flag: Option<&Path>, xdg: Option<OsString>, home: Option<PathBuf>) -> Result<PathBuf> {
+fn resolve_config_dir(
+    flag: Option<&Path>,
+    xdg: Option<OsString>,
+    home: Option<PathBuf>,
+) -> Result<PathBuf> {
     if let Some(dir) = flag {
         return Ok(dir.to_path_buf());
     }
@@ -113,7 +117,8 @@ pub fn load() -> Result<Config> {
     let mut cfg = if path.exists() {
         let text = std::fs::read_to_string(&path)
             .with_context(|| format!("reading config file at {}", path.display()))?;
-        toml::from_str(&text).with_context(|| format!("parsing config file at {}", path.display()))?
+        toml::from_str(&text)
+            .with_context(|| format!("parsing config file at {}", path.display()))?
     } else {
         Config::default()
     };

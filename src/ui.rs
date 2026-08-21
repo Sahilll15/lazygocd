@@ -1,13 +1,14 @@
 use crate::app::{
-    App, ConsoleLogState, DetailRow, Focus, GithubState, JobTab, Modal, ReauthForm, ReauthMode, ReauthStep,
-    Row as TreeRow, TriggerVarsForm,
+    App, ConsoleLogState, DetailRow, Focus, GithubState, JobTab, Modal, ReauthForm, ReauthMode,
+    ReauthStep, Row as TreeRow, TriggerVarsForm,
 };
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{
-    Block, BorderType, Borders, Cell, Clear, List, ListItem, Paragraph, Row as TableRow, Table, Wrap,
+    Block, BorderType, Borders, Cell, Clear, List, ListItem, Paragraph, Row as TableRow, Table,
+    Wrap,
 };
 
 /// A small, cohesive palette instead of scattered color literals - one place
@@ -33,9 +34,13 @@ mod theme {
 
 pub fn draw(f: &mut Frame, app: &mut App) {
     let area = f.area();
-    let chunks =
-        Layout::vertical([Constraint::Length(1), Constraint::Length(1), Constraint::Min(5), Constraint::Length(1)])
-            .split(area);
+    let chunks = Layout::vertical([
+        Constraint::Length(1),
+        Constraint::Length(1),
+        Constraint::Min(5),
+        Constraint::Length(1),
+    ])
+    .split(area);
 
     draw_header(f, app, chunks[0]);
     draw_statusbar(f, app, chunks[1]);
@@ -53,9 +58,13 @@ pub fn draw(f: &mut Frame, app: &mut App) {
             Modal::Reauth(form) => draw_reauth(f, area, &form),
             Modal::GithubConnect { input } => draw_github_connect(f, area, &input),
             Modal::TriggerVars(form) => draw_trigger_vars(f, area, &form),
-            Modal::ConsoleLog(state) => app.console_view_height = draw_console_log(f, area, &state, app.tick),
+            Modal::ConsoleLog(state) => {
+                app.console_view_height = draw_console_log(f, area, &state, app.tick)
+            }
             Modal::ViewPicker { selected } => draw_view_picker(f, area, app, selected),
-            Modal::SaveView { input, pipelines } => draw_save_view(f, area, &input, pipelines.len()),
+            Modal::SaveView { input, pipelines } => {
+                draw_save_view(f, area, &input, pipelines.len())
+            }
         }
     }
 }
@@ -70,7 +79,13 @@ fn draw_header(f: &mut Frame, app: &App, area: Rect) {
     };
 
     let mut spans = vec![
-        Span::styled(" lazygocd ", Style::default().fg(Color::Black).bg(theme::ACCENT).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            " lazygocd ",
+            Style::default()
+                .fg(Color::Black)
+                .bg(theme::ACCENT)
+                .add_modifier(Modifier::BOLD),
+        ),
         Span::raw(" "),
         Span::styled("\u{25cf}", Style::default().fg(dot_color)),
         Span::raw(" "),
@@ -80,15 +95,23 @@ fn draw_header(f: &mut Frame, app: &App, area: Rect) {
         spans.push(Span::raw("  "));
         spans.push(Span::styled(
             format!("[{}]", view.name),
-            Style::default().fg(theme::FAVORITE).add_modifier(Modifier::BOLD),
+            Style::default()
+                .fg(theme::FAVORITE)
+                .add_modifier(Modifier::BOLD),
         ));
     }
     if let Some(err) = &app.error_line {
         spans.push(Span::raw("  "));
-        spans.push(Span::styled(format!("! {err}"), Style::default().fg(theme::DANGER)));
+        spans.push(Span::styled(
+            format!("! {err}"),
+            Style::default().fg(theme::DANGER),
+        ));
     } else if !app.status_line.is_empty() {
         spans.push(Span::raw("  "));
-        spans.push(Span::styled(&app.status_line, Style::default().fg(theme::SUCCESS)));
+        spans.push(Span::styled(
+            &app.status_line,
+            Style::default().fg(theme::SUCCESS),
+        ));
     }
     f.render_widget(Paragraph::new(Line::from(spans)), area);
 }
@@ -115,30 +138,45 @@ fn draw_statusbar(f: &mut Frame, app: &App, area: Rect) {
     }
 
     let mut spans = vec![
-        Span::styled(app.groups.len().to_string(), Style::default().fg(theme::ACCENT).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            app.groups.len().to_string(),
+            Style::default()
+                .fg(theme::ACCENT)
+                .add_modifier(Modifier::BOLD),
+        ),
         Span::styled(" groups", Style::default().fg(theme::MUTED)),
         Span::raw("   "),
         Span::styled(
             app.pipeline_info.len().to_string(),
-            Style::default().fg(theme::ACCENT).add_modifier(Modifier::BOLD),
+            Style::default()
+                .fg(theme::ACCENT)
+                .add_modifier(Modifier::BOLD),
         ),
         Span::styled(" pipelines", Style::default().fg(theme::MUTED)),
     ];
     if paused > 0 {
         spans.push(Span::raw("   "));
-        spans.push(Span::styled(format!("\u{23f8} {paused}"), Style::default().fg(theme::WARNING)));
+        spans.push(Span::styled(
+            format!("\u{23f8} {paused}"),
+            Style::default().fg(theme::WARNING),
+        ));
         spans.push(Span::styled(" paused", Style::default().fg(theme::MUTED)));
     }
     if building > 0 {
         spans.push(Span::raw("   "));
-        spans.push(Span::styled(format!("\u{25d0} {building}"), Style::default().fg(theme::WARNING)));
+        spans.push(Span::styled(
+            format!("\u{25d0} {building}"),
+            Style::default().fg(theme::WARNING),
+        ));
         spans.push(Span::styled(" building", Style::default().fg(theme::MUTED)));
     }
     if failed > 0 {
         spans.push(Span::raw("   "));
         spans.push(Span::styled(
             format!("\u{25cf} {failed}"),
-            Style::default().fg(theme::DANGER).add_modifier(Modifier::BOLD),
+            Style::default()
+                .fg(theme::DANGER)
+                .add_modifier(Modifier::BOLD),
         ));
         spans.push(Span::styled(" failed", Style::default().fg(theme::MUTED)));
     }
@@ -151,8 +189,16 @@ fn footer_hints(pairs: &[(&str, &str)]) -> Line<'static> {
         if i > 0 {
             spans.push(Span::raw("  "));
         }
-        spans.push(Span::styled((*key).to_string(), Style::default().fg(theme::ACCENT).add_modifier(Modifier::BOLD)));
-        spans.push(Span::styled(format!(" {desc}"), Style::default().fg(theme::MUTED)));
+        spans.push(Span::styled(
+            (*key).to_string(),
+            Style::default()
+                .fg(theme::ACCENT)
+                .add_modifier(Modifier::BOLD),
+        ));
+        spans.push(Span::styled(
+            format!(" {desc}"),
+            Style::default().fg(theme::MUTED),
+        ));
     }
     Line::from(spans)
 }
@@ -217,8 +263,10 @@ fn draw_footer(f: &mut Frame, app: &App, area: Rect) {
 }
 
 fn draw_body(f: &mut Frame, app: &mut App, area: Rect) {
-    let cols = Layout::horizontal([Constraint::Percentage(34), Constraint::Percentage(66)]).split(area);
-    let right = Layout::vertical([Constraint::Percentage(55), Constraint::Percentage(45)]).split(cols[1]);
+    let cols =
+        Layout::horizontal([Constraint::Percentage(34), Constraint::Percentage(66)]).split(area);
+    let right =
+        Layout::vertical([Constraint::Percentage(55), Constraint::Percentage(45)]).split(cols[1]);
     // Remembered for mouse hit-testing (click-to-focus, click-to-select).
     app.tree_area = cols[0];
     app.history_area = right[0];
@@ -234,11 +282,21 @@ fn draw_tree(f: &mut Frame, app: &mut App, area: Rect) {
     let block = panel_block("Pipeline Groups", focused);
 
     if app.loading_groups && app.groups.is_empty() {
-        f.render_widget(Paragraph::new(format!("{} Loading dashboard...", spinner(app.tick))).block(block), area);
+        f.render_widget(
+            Paragraph::new(format!("{} Loading dashboard...", spinner(app.tick))).block(block),
+            area,
+        );
         return;
     }
-    if !app.loading_groups && app.groups.is_empty() && app.error_line.is_none() && app.modal.is_none() {
-        f.render_widget(Paragraph::new("Press 'A' to connect to a GoCD server").block(block), area);
+    if !app.loading_groups
+        && app.groups.is_empty()
+        && app.error_line.is_none()
+        && app.modal.is_none()
+    {
+        f.render_widget(
+            Paragraph::new("Press 'A' to connect to a GoCD server").block(block),
+            area,
+        );
         return;
     }
 
@@ -247,22 +305,41 @@ fn draw_tree(f: &mut Frame, app: &mut App, area: Rect) {
         .iter()
         .map(|row| match row {
             TreeRow::FavoritesHeader => {
-                let arrow = if app.favorites_expanded { "\u{25be}" } else { "\u{25b8}" };
+                let arrow = if app.favorites_expanded {
+                    "\u{25be}"
+                } else {
+                    "\u{25b8}"
+                };
                 ListItem::new(Line::from(vec![
                     Span::styled(
                         format!("{arrow} \u{2605} Favorites"),
-                        Style::default().fg(theme::FAVORITE).add_modifier(Modifier::BOLD),
+                        Style::default()
+                            .fg(theme::FAVORITE)
+                            .add_modifier(Modifier::BOLD),
                     ),
-                    Span::styled(format!(" ({})", app.favorites.len()), Style::default().fg(theme::MUTED)),
+                    Span::styled(
+                        format!(" ({})", app.favorites.len()),
+                        Style::default().fg(theme::MUTED),
+                    ),
                 ]))
             }
             TreeRow::FavoritePipeline(name) => pipeline_list_item(app, name, false),
             TreeRow::Group { idx } => {
                 let g = &app.groups[*idx];
-                let arrow = if app.expanded.contains(&g.name) || !app.filter.is_empty() { "\u{25be}" } else { "\u{25b8}" };
+                let arrow = if app.expanded.contains(&g.name) || !app.filter.is_empty() {
+                    "\u{25be}"
+                } else {
+                    "\u{25b8}"
+                };
                 let mut spans = vec![
-                    Span::styled(format!("{arrow} {}", g.name), Style::default().add_modifier(Modifier::BOLD)),
-                    Span::styled(format!(" ({})", g.pipelines.len()), Style::default().fg(theme::MUTED)),
+                    Span::styled(
+                        format!("{arrow} {}", g.name),
+                        Style::default().add_modifier(Modifier::BOLD),
+                    ),
+                    Span::styled(
+                        format!(" ({})", g.pipelines.len()),
+                        Style::default().fg(theme::MUTED),
+                    ),
                 ];
                 let (mut failed, mut building) = (0u32, 0u32);
                 for name in &g.pipelines {
@@ -273,25 +350,39 @@ fn draw_tree(f: &mut Frame, app: &mut App, area: Rect) {
                     }
                 }
                 if failed > 0 {
-                    spans.push(Span::styled(format!(" \u{25cf}{failed}"), Style::default().fg(theme::DANGER)));
+                    spans.push(Span::styled(
+                        format!(" \u{25cf}{failed}"),
+                        Style::default().fg(theme::DANGER),
+                    ));
                 }
                 if building > 0 {
-                    spans.push(Span::styled(format!(" \u{25d0}{building}"), Style::default().fg(theme::WARNING)));
+                    spans.push(Span::styled(
+                        format!(" \u{25d0}{building}"),
+                        Style::default().fg(theme::WARNING),
+                    ));
                 }
                 ListItem::new(Line::from(spans))
             }
-            TreeRow::Pipeline { group_idx, pipeline_idx } => {
+            TreeRow::Pipeline {
+                group_idx,
+                pipeline_idx,
+            } => {
                 let name = &app.groups[*group_idx].pipelines[*pipeline_idx];
                 pipeline_list_item(app, name, true)
             }
         })
         .collect();
 
-    app.tree_state.select((!app.rows.is_empty()).then_some(app.selected));
+    app.tree_state
+        .select((!app.rows.is_empty()).then_some(app.selected));
 
     let list = List::new(items)
         .block(block)
-        .highlight_style(Style::default().bg(theme::SELECTED_BG).add_modifier(Modifier::BOLD))
+        .highlight_style(
+            Style::default()
+                .bg(theme::SELECTED_BG)
+                .add_modifier(Modifier::BOLD),
+        )
         .highlight_symbol("\u{25b6} ");
 
     f.render_stateful_widget(list, area, &mut app.tree_state);
@@ -314,23 +405,39 @@ fn pipeline_list_item(app: &App, name: &str, show_star: bool) -> ListItem<'stati
         ("\u{2022}", Style::default().fg(theme::MUTED))
     };
 
-    let mut spans = vec![Span::raw("   "), Span::styled(icon, icon_style), Span::raw(" ")];
+    let mut spans = vec![
+        Span::raw("   "),
+        Span::styled(icon, icon_style),
+        Span::raw(" "),
+    ];
     if show_star && app.favorites.contains(name) {
-        spans.push(Span::styled("\u{2605} ", Style::default().fg(theme::FAVORITE)));
+        spans.push(Span::styled(
+            "\u{2605} ",
+            Style::default().fg(theme::FAVORITE),
+        ));
     }
     spans.extend(name_spans(name, &app.filter));
     if locked {
-        spans.push(Span::styled(" \u{1f512}", Style::default().fg(theme::MUTED)));
+        spans.push(Span::styled(
+            " \u{1f512}",
+            Style::default().fg(theme::MUTED),
+        ));
     }
     ListItem::new(Line::from(spans))
 }
 
 /// Pipeline name with fuzzy-matched chars highlighted while a filter is set.
 fn name_spans(name: &str, filter: &str) -> Vec<Span<'static>> {
-    let matched = (!filter.is_empty()).then(|| crate::app::fuzzy_match(name, filter)).flatten();
-    let Some(matched) = matched else { return vec![Span::raw(name.to_string())] };
+    let matched = (!filter.is_empty())
+        .then(|| crate::app::fuzzy_match(name, filter))
+        .flatten();
+    let Some(matched) = matched else {
+        return vec![Span::raw(name.to_string())];
+    };
 
-    let hit_style = Style::default().fg(theme::ACCENT).add_modifier(Modifier::BOLD);
+    let hit_style = Style::default()
+        .fg(theme::ACCENT)
+        .add_modifier(Modifier::BOLD);
     let mut spans = Vec::new();
     let mut run = String::new();
     let mut run_is_hit = false;
@@ -353,7 +460,11 @@ fn name_spans(name: &str, filter: &str) -> Vec<Span<'static>> {
 }
 
 fn styled_run(text: String, is_hit: bool, hit_style: Style) -> Span<'static> {
-    if is_hit { Span::styled(text, hit_style) } else { Span::raw(text) }
+    if is_hit {
+        Span::styled(text, hit_style)
+    } else {
+        Span::raw(text)
+    }
 }
 
 fn dot_for(status: &str) -> &'static str {
@@ -385,11 +496,17 @@ fn draw_history(f: &mut Frame, app: &mut App, area: Rect) {
     let block = panel_block(title, focused);
 
     if app.selected_pipeline.is_none() {
-        f.render_widget(Paragraph::new("Select a pipeline (enter) to view its history").block(block), area);
+        f.render_widget(
+            Paragraph::new("Select a pipeline (enter) to view its history").block(block),
+            area,
+        );
         return;
     }
     if app.history_loading && app.history.is_empty() {
-        f.render_widget(Paragraph::new(format!("{} Loading history...", spinner(app.tick))).block(block), area);
+        f.render_widget(
+            Paragraph::new(format!("{} Loading history...", spinner(app.tick))).block(block),
+            area,
+        );
         return;
     }
     if app.history.is_empty() {
@@ -411,20 +528,35 @@ fn draw_history(f: &mut Frame, app: &mut App, area: Rect) {
             TableRow::new(vec![
                 Cell::from(format!("#{} {}", inst.counter, inst.label)),
                 Cell::from(when),
-                Cell::from(Span::styled(status, Style::default().fg(status_color(status)))),
+                Cell::from(Span::styled(
+                    status,
+                    Style::default().fg(status_color(status)),
+                )),
                 Cell::from(cause),
             ])
         })
         .collect();
 
-    let widths = [Constraint::Length(15), Constraint::Length(20), Constraint::Length(12), Constraint::Min(10)];
+    let widths = [
+        Constraint::Length(15),
+        Constraint::Length(20),
+        Constraint::Length(12),
+        Constraint::Min(10),
+    ];
     let table = Table::new(rows, widths)
         .header(
-            TableRow::new(vec!["Run", "When", "Status", "Trigger"])
-                .style(Style::default().fg(theme::MUTED).add_modifier(Modifier::BOLD)),
+            TableRow::new(vec!["Run", "When", "Status", "Trigger"]).style(
+                Style::default()
+                    .fg(theme::MUTED)
+                    .add_modifier(Modifier::BOLD),
+            ),
         )
         .block(block)
-        .row_highlight_style(Style::default().bg(theme::SELECTED_BG).add_modifier(Modifier::BOLD))
+        .row_highlight_style(
+            Style::default()
+                .bg(theme::SELECTED_BG)
+                .add_modifier(Modifier::BOLD),
+        )
         .highlight_symbol("\u{25b6} ");
 
     app.history_state.select(Some(app.history_selected));
@@ -441,12 +573,21 @@ fn draw_detail(f: &mut Frame, app: &App, area: Rect) {
     };
 
     let mut lines: Vec<Line> = Vec::new();
-    lines.push(Line::from(vec![label("Run "), Span::raw(format!("#{} {}", inst.counter, inst.label))]));
+    lines.push(Line::from(vec![
+        label("Run "),
+        Span::raw(format!("#{} {}", inst.counter, inst.label)),
+    ]));
     if let Some(ts) = inst.scheduled_date {
-        lines.push(Line::from(vec![label("Started: "), Span::raw(format_ts(ts))]));
+        lines.push(Line::from(vec![
+            label("Started: "),
+            Span::raw(format_ts(ts)),
+        ]));
     }
     if let Some(comment) = &inst.comment {
-        lines.push(Line::from(vec![label("Comment: "), Span::raw(comment.clone())]));
+        lines.push(Line::from(vec![
+            label("Comment: "),
+            Span::raw(comment.clone()),
+        ]));
     }
     if let Some(cause) = &inst.build_cause {
         if let Some(msg) = &cause.trigger_message {
@@ -466,10 +607,16 @@ fn draw_detail(f: &mut Frame, app: &App, area: Rect) {
             ]));
         }
         if let Some(author) = &m.user_name {
-            lines.push(Line::from(vec![label("Author: "), Span::raw(author.clone())]));
+            lines.push(Line::from(vec![
+                label("Author: "),
+                Span::raw(author.clone()),
+            ]));
         }
         if let Some(ts) = m.modified_time {
-            lines.push(Line::from(vec![label("Committed: "), Span::raw(format_ts(ts))]));
+            lines.push(Line::from(vec![
+                label("Committed: "),
+                Span::raw(format_ts(ts)),
+            ]));
         }
     }
     lines.push(Line::from(""));
@@ -477,7 +624,8 @@ fn draw_detail(f: &mut Frame, app: &App, area: Rect) {
     let selected_row = app.detail_rows.get(app.detail_selected).copied();
     for (si, stage) in inst.stages.iter().enumerate() {
         let status = stage.status.as_deref().unwrap_or("Unknown");
-        let stage_selected = focused && matches!(selected_row, Some(DetailRow::Stage(s)) if s == si);
+        let stage_selected =
+            focused && matches!(selected_row, Some(DetailRow::Stage(s)) if s == si);
         let (cursor, cursor_style) = if stage_selected {
             ("\u{25b6} ", Style::default().fg(theme::ACCENT))
         } else {
@@ -485,22 +633,41 @@ fn draw_detail(f: &mut Frame, app: &App, area: Rect) {
         };
         let mut stage_line = vec![
             Span::styled(cursor, cursor_style),
-            Span::styled(stage.name.clone(), Style::default().add_modifier(Modifier::BOLD)),
+            Span::styled(
+                stage.name.clone(),
+                Style::default().add_modifier(Modifier::BOLD),
+            ),
             Span::raw("  "),
             Span::styled(status, Style::default().fg(status_color(status))),
         ];
         if let Some(approval) = &stage.approval_type {
-            stage_line.push(Span::styled(format!("  ({approval})"), Style::default().fg(theme::MUTED)));
+            stage_line.push(Span::styled(
+                format!("  ({approval})"),
+                Style::default().fg(theme::MUTED),
+            ));
         }
         if let Some(ts) = stage.scheduled_date {
-            stage_line.push(Span::styled(format!("  {}", format_ts(ts)), Style::default().fg(theme::MUTED)));
+            stage_line.push(Span::styled(
+                format!("  {}", format_ts(ts)),
+                Style::default().fg(theme::MUTED),
+            ));
         }
         lines.push(Line::from(stage_line));
         for (ji, job) in stage.jobs.iter().enumerate() {
-            let job_selected = focused && matches!(selected_row, Some(DetailRow::Job(s, j)) if s == si && j == ji);
-            let jresult = job.result.as_deref().or(job.state.as_deref()).unwrap_or("-");
+            let job_selected =
+                focused && matches!(selected_row, Some(DetailRow::Job(s, j)) if s == si && j == ji);
+            let jresult = job
+                .result
+                .as_deref()
+                .or(job.state.as_deref())
+                .unwrap_or("-");
             let (prefix, name_style) = if job_selected {
-                ("\u{25b6} ", Style::default().fg(theme::ACCENT).add_modifier(Modifier::BOLD))
+                (
+                    "\u{25b6} ",
+                    Style::default()
+                        .fg(theme::ACCENT)
+                        .add_modifier(Modifier::BOLD),
+                )
             } else {
                 ("    ", Style::default())
             };
@@ -519,12 +686,19 @@ fn draw_detail(f: &mut Frame, app: &App, area: Rect) {
         lines.push(Line::from(""));
         for (git_ref, state) in &app.github_checks {
             // Only surface non-github.com hosts; the default host is just noise.
-            let host = if git_ref.host == "github.com" { String::new() } else { format!("{}/", git_ref.host) };
+            let host = if git_ref.host == "github.com" {
+                String::new()
+            } else {
+                format!("{}/", git_ref.host)
+            };
             let status_span = match state {
-                GithubState::Idle => Span::styled("(not checked)", Style::default().fg(theme::MUTED)),
-                GithubState::Checking => {
-                    Span::styled(format!("{} checking...", spinner(app.tick)), Style::default().fg(theme::MUTED))
+                GithubState::Idle => {
+                    Span::styled("(not checked)", Style::default().fg(theme::MUTED))
                 }
+                GithubState::Checking => Span::styled(
+                    format!("{} checking...", spinner(app.tick)),
+                    Style::default().fg(theme::MUTED),
+                ),
                 GithubState::Found(latest) if latest == &git_ref.deployed_sha => {
                     Span::styled("\u{2713} up to date", Style::default().fg(theme::SUCCESS))
                 }
@@ -532,22 +706,34 @@ fn draw_detail(f: &mut Frame, app: &App, area: Rect) {
                     format!("\u{26a0} not latest (latest {})", short_sha(latest)),
                     Style::default().fg(theme::WARNING),
                 ),
-                GithubState::Failed(_) => {
-                    Span::styled("can't check (connect GitHub with '@')", Style::default().fg(theme::MUTED))
-                }
+                GithubState::Failed(_) => Span::styled(
+                    "can't check (connect GitHub with '@')",
+                    Style::default().fg(theme::MUTED),
+                ),
             };
             lines.push(Line::from(vec![
                 label("GitHub: "),
-                Span::raw(format!("{host}{}/{}@{}", git_ref.owner, git_ref.repo, git_ref.branch)),
+                Span::raw(format!(
+                    "{host}{}/{}@{}",
+                    git_ref.owner, git_ref.repo, git_ref.branch
+                )),
                 Span::raw("  "),
-                Span::styled(short_sha(&git_ref.deployed_sha), Style::default().fg(theme::ACCENT)),
+                Span::styled(
+                    short_sha(&git_ref.deployed_sha),
+                    Style::default().fg(theme::ACCENT),
+                ),
                 Span::raw("  "),
                 status_span,
             ]));
         }
     }
 
-    f.render_widget(Paragraph::new(lines).block(block).wrap(Wrap { trim: false }), area);
+    f.render_widget(
+        Paragraph::new(lines)
+            .block(block)
+            .wrap(Wrap { trim: false }),
+        area,
+    );
 }
 
 fn label(text: &str) -> Span<'static> {
@@ -558,7 +744,9 @@ fn short_sha(sha: &str) -> String {
     sha.chars().take(7).collect()
 }
 
-const SPINNER_FRAMES: [char; 8] = ['\u{280b}', '\u{2819}', '\u{2839}', '\u{2838}', '\u{283c}', '\u{2834}', '\u{2826}', '\u{2827}'];
+const SPINNER_FRAMES: [char; 8] = [
+    '\u{280b}', '\u{2819}', '\u{2839}', '\u{2838}', '\u{283c}', '\u{2834}', '\u{2826}', '\u{2827}',
+];
 
 /// tick increments every ~40ms; divide down so frames change roughly every 160ms.
 fn spinner(tick: u64) -> char {
@@ -568,7 +756,10 @@ fn spinner(tick: u64) -> char {
 /// Epoch millis (as GoCD sends them) to a local-time "YYYY-MM-DD HH:MM:SS" string.
 fn format_ts(ms: i64) -> String {
     match chrono::DateTime::from_timestamp_millis(ms) {
-        Some(dt) => dt.with_timezone(&chrono::Local).format("%Y-%m-%d %H:%M:%S").to_string(),
+        Some(dt) => dt
+            .with_timezone(&chrono::Local)
+            .format("%Y-%m-%d %H:%M:%S")
+            .to_string(),
         None => "-".to_string(),
     }
 }
@@ -578,17 +769,28 @@ fn first_line(text: &str) -> String {
 }
 
 fn draw_filter_box(f: &mut Frame, app: &App, area: Rect) {
-    let rect = Rect { x: area.x + 2, y: area.y, width: (area.width.saturating_sub(4)).min(50), height: 3 };
+    let rect = Rect {
+        x: area.x + 2,
+        y: area.y,
+        width: (area.width.saturating_sub(4)).min(50),
+        height: 3,
+    };
     f.render_widget(Clear, rect);
     let block = styled_block("Filter", theme::ACCENT);
-    f.render_widget(Paragraph::new(format!("/{}", app.filter)).block(block), rect);
+    f.render_widget(
+        Paragraph::new(format!("/{}", app.filter)).block(block),
+        rect,
+    );
 }
 
 fn draw_help(f: &mut Frame, area: Rect) {
     let rect = centered_rect(70, 85, area);
     f.render_widget(Clear, rect);
     let text = vec![
-        Line::from(Span::styled("lazygocd keybindings", Style::default().add_modifier(Modifier::BOLD))),
+        Line::from(Span::styled(
+            "lazygocd keybindings",
+            Style::default().add_modifier(Modifier::BOLD),
+        )),
         Line::from(""),
         Line::from("j/k, \u{2193}/\u{2191}     move selection"),
         Line::from("g/G          jump to top / bottom of the focused list"),
@@ -604,7 +806,9 @@ fn draw_help(f: &mut Frame, area: Rect) {
         Line::from("o            open the run's commit on GitHub (or the pending diff)"),
         Line::from("y            copy commit sha / pipeline name to the clipboard"),
         Line::from("X            cancel the currently running stage"),
-        Line::from("R            rerun failed jobs of a failed stage ('a' in the confirm = whole stage)"),
+        Line::from(
+            "R            rerun failed jobs of a failed stage ('a' in the confirm = whole stage)",
+        ),
         Line::from("/            fuzzy-filter pipelines by name"),
         Line::from("r            refresh"),
         Line::from("A            connect / reconnect GoCD"),
@@ -616,16 +820,28 @@ fn draw_help(f: &mut Frame, area: Rect) {
         Line::from("click        focus pane / select row; click a selected row to open it"),
         Line::from("wheel        scroll the pane under the cursor (or the console log)"),
         Line::from(""),
-        Line::from(Span::styled("in the history pane:", Style::default().fg(theme::MUTED))),
+        Line::from(Span::styled(
+            "in the history pane:",
+            Style::default().fg(theme::MUTED),
+        )),
         Line::from("             older runs load automatically when you reach the bottom row"),
-        Line::from(Span::styled("in the details pane:", Style::default().fg(theme::MUTED))),
+        Line::from(Span::styled(
+            "in the details pane:",
+            Style::default().fg(theme::MUTED),
+        )),
         Line::from("enter        open the selected job's console log"),
-        Line::from(Span::styled("in the console log view:", Style::default().fg(theme::MUTED))),
+        Line::from(Span::styled(
+            "in the console log view:",
+            Style::default().fg(theme::MUTED),
+        )),
         Line::from("tab/1-3      switch Console / Artifacts / Materials tabs"),
         Line::from("/            search the log, n/N next/prev match"),
         Line::from("j/k          scroll   g/G top/bottom   r refresh   q/esc close"),
         Line::from(""),
-        Line::from(Span::styled("press any key to close", Style::default().fg(theme::MUTED))),
+        Line::from(Span::styled(
+            "press any key to close",
+            Style::default().fg(theme::MUTED),
+        )),
     ];
     let block = styled_block("Help", theme::ACCENT);
     f.render_widget(Paragraph::new(text).block(block), rect);
@@ -639,8 +855,14 @@ fn draw_confirm(f: &mut Frame, area: Rect, message: &str) {
     // a \n inside a single Line renders literally.
     let mut text: Vec<Line> = message.lines().map(|l| Line::from(l.to_string())).collect();
     text.push(Line::from(""));
-    text.push(Line::from(Span::styled("y/enter confirm   n/esc cancel", Style::default().fg(theme::MUTED))));
-    f.render_widget(Paragraph::new(text).block(block).wrap(Wrap { trim: false }), rect);
+    text.push(Line::from(Span::styled(
+        "y/enter confirm   n/esc cancel",
+        Style::default().fg(theme::MUTED),
+    )));
+    f.render_widget(
+        Paragraph::new(text).block(block).wrap(Wrap { trim: false }),
+        rect,
+    );
 }
 
 /// 'T' trigger-with-variables: entered NAME=VALUE pairs stack up as summary
@@ -648,7 +870,10 @@ fn draw_confirm(f: &mut Frame, area: Rect, message: &str) {
 fn draw_trigger_vars(f: &mut Frame, area: Rect, form: &TriggerVarsForm) {
     let rect = centered_rect(60, 55, area);
     f.render_widget(Clear, rect);
-    let block = styled_block(format!("Trigger {} with variables", form.pipeline), theme::ACCENT);
+    let block = styled_block(
+        format!("Trigger {} with variables", form.pipeline),
+        theme::ACCENT,
+    );
 
     let mut lines: Vec<Line> = Vec::new();
     for (name, value) in &form.vars {
@@ -677,12 +902,23 @@ fn draw_trigger_vars(f: &mut Frame, area: Rect, form: &TriggerVarsForm) {
         lines.push(Line::from(""));
         lines.push(input_line(&form.input, false));
         if let Some(err) = &form.error {
-            lines.push(Line::from(Span::styled(err.clone(), Style::default().fg(theme::DANGER))));
+            lines.push(Line::from(Span::styled(
+                err.clone(),
+                Style::default().fg(theme::DANGER),
+            )));
         }
         lines.push(Line::from(""));
-        lines.push(Line::from(Span::styled("enter add/finish   esc cancel", Style::default().fg(theme::MUTED))));
+        lines.push(Line::from(Span::styled(
+            "enter add/finish   esc cancel",
+            Style::default().fg(theme::MUTED),
+        )));
     }
-    f.render_widget(Paragraph::new(lines).block(block).wrap(Wrap { trim: false }), rect);
+    f.render_widget(
+        Paragraph::new(lines)
+            .block(block)
+            .wrap(Wrap { trim: false }),
+        rect,
+    );
 }
 
 /// Returns the content viewport height so scroll-up clamping can use it.
@@ -700,14 +936,18 @@ fn draw_console_log(f: &mut Frame, area: Rect, state: &ConsoleLogState, tick: u6
         Constraint::Length(1),
     ])
     .split(inner);
-    let (tabs_area, content_area, status_area, hint_area) = (layout[0], layout[1], layout[2], layout[3]);
+    let (tabs_area, content_area, status_area, hint_area) =
+        (layout[0], layout[1], layout[2], layout[3]);
 
     // Tab bar
     let mut tab_spans = Vec::new();
-    for (i, (tab, label)) in
-        [(JobTab::Console, "1 Console"), (JobTab::Artifacts, "2 Artifacts"), (JobTab::Materials, "3 Materials")]
-            .iter()
-            .enumerate()
+    for (i, (tab, label)) in [
+        (JobTab::Console, "1 Console"),
+        (JobTab::Artifacts, "2 Artifacts"),
+        (JobTab::Materials, "3 Materials"),
+    ]
+    .iter()
+    .enumerate()
     {
         if i > 0 {
             tab_spans.push(Span::styled("  |  ", Style::default().fg(theme::MUTED)));
@@ -715,10 +955,15 @@ fn draw_console_log(f: &mut Frame, area: Rect, state: &ConsoleLogState, tick: u6
         if *tab == state.tab {
             tab_spans.push(Span::styled(
                 (*label).to_string(),
-                Style::default().fg(theme::ACCENT).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(theme::ACCENT)
+                    .add_modifier(Modifier::BOLD),
             ));
         } else {
-            tab_spans.push(Span::styled((*label).to_string(), Style::default().fg(theme::MUTED)));
+            tab_spans.push(Span::styled(
+                (*label).to_string(),
+                Style::default().fg(theme::MUTED),
+            ));
         }
     }
     f.render_widget(Paragraph::new(Line::from(tab_spans)), tabs_area);
@@ -727,63 +972,119 @@ fn draw_console_log(f: &mut Frame, area: Rect, state: &ConsoleLogState, tick: u6
         JobTab::Console => draw_console_tab(f, content_area, state, tick),
         JobTab::Artifacts => draw_artifacts_tab(f, content_area, state, tick),
         JobTab::Materials => {
-            let text: Vec<Line> = state.materials.iter().map(|l| Line::from(l.clone())).collect();
+            let text: Vec<Line> = state
+                .materials
+                .iter()
+                .map(|l| Line::from(l.clone()))
+                .collect();
             let visible = content_area.height as usize;
-            let scroll = state.scroll.min(state.materials.len().saturating_sub(visible));
-            f.render_widget(Paragraph::new(text).scroll((scroll as u16, 0)), content_area);
+            let scroll = state
+                .scroll
+                .min(state.materials.len().saturating_sub(visible));
+            f.render_widget(
+                Paragraph::new(text).scroll((scroll as u16, 0)),
+                content_area,
+            );
         }
     }
 
     // Status row
     let mut status_spans = Vec::new();
     if let Some(res) = &state.result {
-        status_spans.push(Span::styled(res.clone(), Style::default().fg(status_color(res)).add_modifier(Modifier::BOLD)));
+        status_spans.push(Span::styled(
+            res.clone(),
+            Style::default()
+                .fg(status_color(res))
+                .add_modifier(Modifier::BOLD),
+        ));
         status_spans.push(Span::raw("  "));
     }
-    status_spans.push(Span::styled(format!("{} lines", state.lines.len()), Style::default().fg(theme::MUTED)));
+    status_spans.push(Span::styled(
+        format!("{} lines", state.lines.len()),
+        Style::default().fg(theme::MUTED),
+    ));
     if state.search_active || !state.search.is_empty() {
         status_spans.push(Span::raw("  "));
         let cursor = if state.search_active { "\u{2588}" } else { "" };
-        status_spans.push(Span::styled(format!("/{}{}", state.search, cursor), Style::default().fg(theme::ACCENT)));
+        status_spans.push(Span::styled(
+            format!("/{}{}", state.search, cursor),
+            Style::default().fg(theme::ACCENT),
+        ));
         if !state.search.is_empty() {
-            let pos = if state.matches.is_empty() { 0 } else { state.match_idx + 1 };
+            let pos = if state.matches.is_empty() {
+                0
+            } else {
+                state.match_idx + 1
+            };
             status_spans.push(Span::styled(
                 format!("  {}/{} matches", pos, state.matches.len()),
-                Style::default().fg(if state.matches.is_empty() { theme::DANGER } else { theme::MUTED }),
+                Style::default().fg(if state.matches.is_empty() {
+                    theme::DANGER
+                } else {
+                    theme::MUTED
+                }),
             ));
         }
     }
     if state.loading || state.artifacts_loading {
         status_spans.push(Span::raw("  "));
-        status_spans.push(Span::styled(format!("{} refreshing", spinner(tick)), Style::default().fg(theme::MUTED)));
+        status_spans.push(Span::styled(
+            format!("{} refreshing", spinner(tick)),
+            Style::default().fg(theme::MUTED),
+        ));
     }
     if state.following && state.tab == JobTab::Console {
         status_spans.push(Span::raw("  "));
-        status_spans.push(Span::styled("following", Style::default().fg(theme::SUCCESS)));
+        status_spans.push(Span::styled(
+            "following",
+            Style::default().fg(theme::SUCCESS),
+        ));
     }
     if let Some(err) = &state.error {
         status_spans.push(Span::raw("  "));
-        status_spans.push(Span::styled(format!("! {err}"), Style::default().fg(theme::DANGER)));
+        status_spans.push(Span::styled(
+            format!("! {err}"),
+            Style::default().fg(theme::DANGER),
+        ));
     }
     f.render_widget(Paragraph::new(Line::from(status_spans)), status_area);
 
     let hint = match state.tab {
-        JobTab::Console => "tab/1-3 switch   / search   n/N match   j/k scroll   g/G top/bottom   r refresh   q/esc close",
-        JobTab::Artifacts => "tab/1-3 switch   j/k select   enter/o open in browser   r refresh   q/esc close",
+        JobTab::Console => {
+            "tab/1-3 switch   / search   n/N match   j/k scroll   g/G top/bottom   r refresh   q/esc close"
+        }
+        JobTab::Artifacts => {
+            "tab/1-3 switch   j/k select   enter/o open in browser   r refresh   q/esc close"
+        }
         JobTab::Materials => "tab/1-3 switch   j/k scroll   q/esc close",
     };
-    f.render_widget(Paragraph::new(Line::from(Span::styled(hint, Style::default().fg(theme::MUTED)))), hint_area);
+    f.render_widget(
+        Paragraph::new(Line::from(Span::styled(
+            hint,
+            Style::default().fg(theme::MUTED),
+        ))),
+        hint_area,
+    );
     content_area.height
 }
 
 fn draw_console_tab(f: &mut Frame, content_area: Rect, state: &ConsoleLogState, tick: u64) {
     if state.lines.is_empty() && state.loading {
-        f.render_widget(Paragraph::new(format!("{} Loading console log...", spinner(tick))), content_area);
+        f.render_widget(
+            Paragraph::new(format!("{} Loading console log...", spinner(tick))),
+            content_area,
+        );
         return;
     }
     if state.lines.is_empty() {
         let msg = state.error.as_deref().unwrap_or("No output yet");
-        f.render_widget(Paragraph::new(Span::styled(msg.to_string(), Style::default().fg(theme::MUTED))), content_area);
+        f.render_widget(
+            Paragraph::new(Span::styled(
+                msg.to_string(),
+                Style::default().fg(theme::MUTED),
+            )),
+            content_area,
+        );
         return;
     }
     let visible = content_area.height as usize;
@@ -797,23 +1098,40 @@ fn draw_console_tab(f: &mut Frame, content_area: Rect, state: &ConsoleLogState, 
         .enumerate()
         .skip(scroll)
         .take(visible)
-        .map(|(i, l)| console_line(l, query.as_deref(), state.matches.get(state.match_idx) == Some(&i)))
+        .map(|(i, l)| {
+            console_line(
+                l,
+                query.as_deref(),
+                state.matches.get(state.match_idx) == Some(&i),
+            )
+        })
         .collect();
     f.render_widget(Paragraph::new(text), content_area);
 }
 
 fn draw_artifacts_tab(f: &mut Frame, content_area: Rect, state: &ConsoleLogState, tick: u64) {
     let Some(rows) = &state.artifacts else {
-        f.render_widget(Paragraph::new(format!("{} Loading artifacts...", spinner(tick))), content_area);
+        f.render_widget(
+            Paragraph::new(format!("{} Loading artifacts...", spinner(tick))),
+            content_area,
+        );
         return;
     };
     if rows.is_empty() {
-        f.render_widget(Paragraph::new(Span::styled("No artifacts", Style::default().fg(theme::MUTED))), content_area);
+        f.render_widget(
+            Paragraph::new(Span::styled(
+                "No artifacts",
+                Style::default().fg(theme::MUTED),
+            )),
+            content_area,
+        );
         return;
     }
     let visible = content_area.height as usize;
     // Keep the selected row in view.
-    let offset = state.artifact_selected.saturating_sub(visible.saturating_sub(1));
+    let offset = state
+        .artifact_selected
+        .saturating_sub(visible.saturating_sub(1));
     let text: Vec<Line> = rows
         .iter()
         .enumerate()
@@ -823,7 +1141,9 @@ fn draw_artifacts_tab(f: &mut Frame, content_area: Rect, state: &ConsoleLogState
             let icon = if *folder { "\u{25b8} " } else { "  " };
             let selected = i == state.artifact_selected;
             let style = if selected {
-                Style::default().fg(theme::ACCENT).add_modifier(Modifier::BOLD)
+                Style::default()
+                    .fg(theme::ACCENT)
+                    .add_modifier(Modifier::BOLD)
             } else if *folder {
                 Style::default().add_modifier(Modifier::BOLD)
             } else {
@@ -869,7 +1189,10 @@ fn console_line<'a>(raw: &'a str, query: Option<&str>, current_match: bool) -> L
         for (start, end) in find_matches_ci(body, q) {
             spans.push(Span::styled(&body[pos..start], body_style));
             let hl = if current_match {
-                Style::default().fg(Color::Black).bg(theme::WARNING).add_modifier(Modifier::BOLD)
+                Style::default()
+                    .fg(Color::Black)
+                    .bg(theme::WARNING)
+                    .add_modifier(Modifier::BOLD)
             } else {
                 Style::default().fg(Color::Black).bg(theme::ACCENT)
             };
@@ -941,7 +1264,10 @@ fn console_body_style(marker: &str, body: &str) -> Style {
         Style::default().fg(theme::DANGER)
     } else if lower.contains("warn") || lower.contains("deprecat") || marker == "&2" {
         Style::default().fg(theme::WARNING)
-    } else if lower.contains("passed") || lower.contains("success") || lower.contains("job completed") {
+    } else if lower.contains("passed")
+        || lower.contains("success")
+        || lower.contains("job completed")
+    {
         Style::default().fg(theme::SUCCESS)
     } else if body.starts_with("[go]") || marker == "##" {
         Style::default().fg(theme::MUTED)
@@ -963,9 +1289,17 @@ fn draw_save_view(f: &mut Frame, area: Rect, input: &str, count: usize) {
         Line::from(""),
         input_line(input, false),
         Line::from(""),
-        Line::from(Span::styled("enter save   esc cancel", Style::default().fg(theme::MUTED))),
+        Line::from(Span::styled(
+            "enter save   esc cancel",
+            Style::default().fg(theme::MUTED),
+        )),
     ];
-    f.render_widget(Paragraph::new(lines).block(block).wrap(Wrap { trim: false }), rect);
+    f.render_widget(
+        Paragraph::new(lines)
+            .block(block)
+            .wrap(Wrap { trim: false }),
+        rect,
+    );
 }
 
 fn draw_view_picker(f: &mut Frame, area: Rect, app: &App, selected: usize) {
@@ -984,7 +1318,12 @@ fn draw_view_picker(f: &mut Frame, area: Rect, app: &App, selected: usize) {
         "j/k select   enter apply   esc close",
         Style::default().fg(theme::MUTED),
     )));
-    f.render_widget(Paragraph::new(lines).block(block).wrap(Wrap { trim: false }), rect);
+    f.render_widget(
+        Paragraph::new(lines)
+            .block(block)
+            .wrap(Wrap { trim: false }),
+        rect,
+    );
 }
 
 fn draw_github_connect(f: &mut Frame, area: Rect, input: &str) {
@@ -1001,9 +1340,17 @@ fn draw_github_connect(f: &mut Frame, area: Rect, input: &str) {
         Line::from(""),
         input_line(input, true),
         Line::from(""),
-        Line::from(Span::styled("enter save   esc cancel", Style::default().fg(theme::MUTED))),
+        Line::from(Span::styled(
+            "enter save   esc cancel",
+            Style::default().fg(theme::MUTED),
+        )),
     ];
-    f.render_widget(Paragraph::new(lines).block(block).wrap(Wrap { trim: false }), rect);
+    f.render_widget(
+        Paragraph::new(lines)
+            .block(block)
+            .wrap(Wrap { trim: false }),
+        rect,
+    );
 }
 
 fn draw_reauth(f: &mut Frame, area: Rect, form: &ReauthForm) {
@@ -1023,12 +1370,22 @@ fn draw_reauth(f: &mut Frame, area: Rect, form: &ReauthForm) {
         lines.push(summary_line("Server", &form.server_url));
         wrote_summary = true;
     }
-    if matches!(form.step, ReauthStep::Username | ReauthStep::Secret | ReauthStep::Insecure) {
-        let method = if form.use_token { "Access token" } else { "Username & password" };
+    if matches!(
+        form.step,
+        ReauthStep::Username | ReauthStep::Secret | ReauthStep::Insecure
+    ) {
+        let method = if form.use_token {
+            "Access token"
+        } else {
+            "Username & password"
+        };
         lines.push(summary_line("Method", method));
         wrote_summary = true;
     }
-    if matches!(form.step, ReauthStep::Secret | ReauthStep::Insecure) && !form.use_token && !form.username.is_empty() {
+    if matches!(form.step, ReauthStep::Secret | ReauthStep::Insecure)
+        && !form.use_token
+        && !form.username.is_empty()
+    {
         lines.push(summary_line("User", &form.username));
         wrote_summary = true;
     }
@@ -1039,7 +1396,10 @@ fn draw_reauth(f: &mut Frame, area: Rect, form: &ReauthForm) {
     match form.step {
         ReauthStep::ServerUrl => {
             lines.push(field_label("GoCD server URL"));
-            lines.push(Line::from(Span::styled("e.g. https://gocd.example.com/go", Style::default().fg(theme::MUTED))));
+            lines.push(Line::from(Span::styled(
+                "e.g. https://gocd.example.com/go",
+                Style::default().fg(theme::MUTED),
+            )));
             lines.push(Line::from(""));
             lines.push(input_line(&form.input, false));
         }
@@ -1047,22 +1407,35 @@ fn draw_reauth(f: &mut Frame, area: Rect, form: &ReauthForm) {
             lines.push(field_label("Authenticate with"));
             lines.push(Line::from(""));
             lines.push(choice_line("Username & password", form.choice_index == 0));
-            lines.push(choice_line("Access token (recommended)", form.choice_index == 1));
+            lines.push(choice_line(
+                "Access token (recommended)",
+                form.choice_index == 1,
+            ));
         }
         ReauthStep::Username => {
             lines.push(field_label("Username"));
-            lines.push(Line::from(Span::styled("leave blank if the server has no auth", Style::default().fg(theme::MUTED))));
+            lines.push(Line::from(Span::styled(
+                "leave blank if the server has no auth",
+                Style::default().fg(theme::MUTED),
+            )));
             lines.push(Line::from(""));
             lines.push(input_line(&form.input, false));
         }
         ReauthStep::Secret => {
-            lines.push(field_label(if form.use_token { "Access token" } else { "Password" }));
+            lines.push(field_label(if form.use_token {
+                "Access token"
+            } else {
+                "Password"
+            }));
             lines.push(Line::from(""));
             lines.push(input_line(&form.input, true));
         }
         ReauthStep::Insecure => {
             lines.push(field_label("Skip TLS certificate verification?"));
-            lines.push(Line::from(Span::styled("only for self-signed certs", Style::default().fg(theme::MUTED))));
+            lines.push(Line::from(Span::styled(
+                "only for self-signed certs",
+                Style::default().fg(theme::MUTED),
+            )));
             lines.push(Line::from(""));
             lines.push(choice_line("No (recommended)", form.choice_index == 0));
             lines.push(choice_line("Yes", form.choice_index == 1));
@@ -1075,9 +1448,17 @@ fn draw_reauth(f: &mut Frame, area: Rect, form: &ReauthForm) {
     } else {
         "enter confirm   esc cancel"
     };
-    lines.push(Line::from(Span::styled(hint, Style::default().fg(theme::MUTED))));
+    lines.push(Line::from(Span::styled(
+        hint,
+        Style::default().fg(theme::MUTED),
+    )));
 
-    f.render_widget(Paragraph::new(lines).block(block).wrap(Wrap { trim: false }), rect);
+    f.render_widget(
+        Paragraph::new(lines)
+            .block(block)
+            .wrap(Wrap { trim: false }),
+        rect,
+    );
 }
 
 fn summary_line(label: &str, value: &str) -> Line<'static> {
@@ -1089,22 +1470,37 @@ fn summary_line(label: &str, value: &str) -> Line<'static> {
 }
 
 fn field_label(text: &str) -> Line<'static> {
-    Line::from(Span::styled(text.to_string(), Style::default().add_modifier(Modifier::BOLD)))
+    Line::from(Span::styled(
+        text.to_string(),
+        Style::default().add_modifier(Modifier::BOLD),
+    ))
 }
 
 fn input_line(input: &str, masked: bool) -> Line<'static> {
-    let shown = if masked { "\u{2022}".repeat(input.chars().count()) } else { input.to_string() };
-    Line::from(Span::styled(format!("> {shown}"), Style::default().fg(theme::ACCENT)))
+    let shown = if masked {
+        "\u{2022}".repeat(input.chars().count())
+    } else {
+        input.to_string()
+    };
+    Line::from(Span::styled(
+        format!("> {shown}"),
+        Style::default().fg(theme::ACCENT),
+    ))
 }
 
 fn choice_line(label: &str, selected: bool) -> Line<'static> {
     if selected {
         Line::from(Span::styled(
             format!("\u{25b6} {label}"),
-            Style::default().fg(theme::ACCENT).add_modifier(Modifier::BOLD),
+            Style::default()
+                .fg(theme::ACCENT)
+                .add_modifier(Modifier::BOLD),
         ))
     } else {
-        Line::from(Span::styled(format!("  {label}"), Style::default().fg(theme::MUTED)))
+        Line::from(Span::styled(
+            format!("  {label}"),
+            Style::default().fg(theme::MUTED),
+        ))
     }
 }
 
@@ -1143,7 +1539,11 @@ mod tests {
     // timestamp sniff; must render, not panic.
     #[test]
     fn console_line_multibyte_after_timestamp_sniff() {
-        let _ = console_line("12:34:56 \u{65e5}\u{672c}\u{8a9e}\u{30c6}\u{30b9}\u{30c8} more text", None, false);
+        let _ = console_line(
+            "12:34:56 \u{65e5}\u{672c}\u{8a9e}\u{30c6}\u{30b9}\u{30c8} more text",
+            None,
+            false,
+        );
         let _ = console_line("##|10:00:00.000 caf\u{e9} ok", None, false);
     }
 
@@ -1164,7 +1564,10 @@ mod tests {
 
     #[test]
     fn find_matches_ci_basic() {
-        assert_eq!(find_matches_ci("Error and ERROR", "error"), vec![(0, 5), (10, 15)]);
+        assert_eq!(
+            find_matches_ci("Error and ERROR", "error"),
+            vec![(0, 5), (10, 15)]
+        );
         assert!(find_matches_ci("abc", "").is_empty());
         assert!(find_matches_ci("abc", "zz").is_empty());
     }

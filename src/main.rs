@@ -48,7 +48,12 @@ fn main() -> anyhow::Result<()> {
 
     match cli.command {
         Some(Command::Completions { shell }) => {
-            clap_complete::generate(shell, &mut Cli::command(), "lazygocd", &mut std::io::stdout());
+            clap_complete::generate(
+                shell,
+                &mut Cli::command(),
+                "lazygocd",
+                &mut std::io::stdout(),
+            );
             return Ok(());
         }
         Some(Command::Man) => {

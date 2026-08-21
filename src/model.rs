@@ -119,7 +119,10 @@ pub struct Link {
 /// Cursor for the next history page, parsed from _links.next.href's ?after=<n>.
 pub fn next_page_cursor(href: &str) -> Option<u64> {
     let query = href.split('?').nth(1)?;
-    query.split('&').find_map(|kv| kv.strip_prefix("after=")).and_then(|v| v.parse().ok())
+    query
+        .split('&')
+        .find_map(|kv| kv.strip_prefix("after="))
+        .and_then(|v| v.parse().ok())
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -244,7 +247,9 @@ impl PipelineInstance {
 
     /// Every direct Git material of this run, in material order.
     pub fn git_refs(&self) -> Vec<GitRef> {
-        let Some(cause) = &self.build_cause else { return Vec::new() };
+        let Some(cause) = &self.build_cause else {
+            return Vec::new();
+        };
         cause
             .material_revisions
             .iter()
@@ -254,7 +259,13 @@ impl PipelineInstance {
                 let (host, owner, repo) = parse_git_host_owner_repo(desc)?;
                 let branch = parse_branch(desc).unwrap_or_else(|| "main".to_string());
                 let deployed_sha = mr.modifications.first()?.revision.clone()?;
-                Some(GitRef { host, owner, repo, branch, deployed_sha })
+                Some(GitRef {
+                    host,
+                    owner,
+                    repo,
+                    branch,
+                    deployed_sha,
+                })
             })
             .collect()
     }
@@ -277,14 +288,18 @@ fn parse_git_host_owner_repo(desc: &str) -> Option<(String, String, String)> {
     let (host, rest) = if let Some(ssh) = url.strip_prefix("git@") {
         ssh.split_once(':')?
     } else {
-        let no_scheme = url.strip_prefix("https://").or_else(|| url.strip_prefix("http://"))?;
+        let no_scheme = url
+            .strip_prefix("https://")
+            .or_else(|| url.strip_prefix("http://"))?;
         no_scheme.split_once('/')?
     };
-    let rest = rest.trim_start_matches('/').trim_end_matches('/').trim_end_matches(".git");
+    let rest = rest
+        .trim_start_matches('/')
+        .trim_end_matches('/')
+        .trim_end_matches(".git");
     let (owner, repo) = rest.split_once('/')?;
-    (!host.is_empty() && !owner.is_empty() && !repo.is_empty()).then(|| {
-        (host.to_string(), owner.to_string(), repo.to_string())
-    })
+    (!host.is_empty() && !owner.is_empty() && !repo.is_empty())
+        .then(|| (host.to_string(), owner.to_string(), repo.to_string()))
 }
 
 fn parse_branch(desc: &str) -> Option<String> {
@@ -382,9 +397,18 @@ mod tests {
 
     #[test]
     fn next_page_cursor_parses_after_param() {
-        assert_eq!(next_page_cursor("http://go/api/pipelines/x/history?after=205"), Some(205));
-        assert_eq!(next_page_cursor("/go/api/pipelines/x/history?page_size=10&after=42"), Some(42));
-        assert_eq!(next_page_cursor("/go/api/pipelines/x/history?after=42&page_size=10"), Some(42));
+        assert_eq!(
+            next_page_cursor("http://go/api/pipelines/x/history?after=205"),
+            Some(205)
+        );
+        assert_eq!(
+            next_page_cursor("/go/api/pipelines/x/history?page_size=10&after=42"),
+            Some(42)
+        );
+        assert_eq!(
+            next_page_cursor("/go/api/pipelines/x/history?after=42&page_size=10"),
+            Some(42)
+        );
         assert_eq!(next_page_cursor("/go/api/pipelines/x/history"), None);
         assert_eq!(next_page_cursor("/history?before=9"), None);
         assert_eq!(next_page_cursor("/history?after=notanumber"), None);
@@ -449,7 +473,10 @@ mod tests {
                     git_revision("git@github.com:acme/web-app.git", "main", "aaa"),
                     // Non-git materials (upstream pipelines) must be skipped, not error.
                     MaterialRevision {
-                        material: MaterialInfo { kind: Some("Pipeline".into()), description: None },
+                        material: MaterialInfo {
+                            kind: Some("Pipeline".into()),
+                            description: None,
+                        },
                         modifications: Vec::new(),
                     },
                     git_revision("https://ghe.corp.io/platform/deploy", "release", "bbb"),
@@ -458,8 +485,22 @@ mod tests {
         };
         let refs = inst.git_refs();
         assert_eq!(refs.len(), 2);
-        assert_eq!((refs[0].host.as_str(), refs[0].repo.as_str(), refs[0].deployed_sha.as_str()), ("github.com", "web-app", "aaa"));
-        assert_eq!((refs[1].host.as_str(), refs[1].branch.as_str(), refs[1].deployed_sha.as_str()), ("ghe.corp.io", "release", "bbb"));
+        assert_eq!(
+            (
+                refs[0].host.as_str(),
+                refs[0].repo.as_str(),
+                refs[0].deployed_sha.as_str()
+            ),
+            ("github.com", "web-app", "aaa")
+        );
+        assert_eq!(
+            (
+                refs[1].host.as_str(),
+                refs[1].branch.as_str(),
+                refs[1].deployed_sha.as_str()
+            ),
+            ("ghe.corp.io", "release", "bbb")
+        );
         assert_eq!(inst.git_ref().unwrap().deployed_sha, "aaa");
         assert_eq!(refs[0].key(), "github.com/acme/web-app@main");
     }
@@ -499,11 +540,4 @@ pub struct ViewFilter {
     pub state: Vec<String>,
     #[serde(default)]
     pub pipelines: Vec<String>,
-}
-
-impl ViewFilter {
-    pub fn matches(&self, pipeline: &str) -> bool {
-        let listed = self.pipelines.iter().any(|p| p == pipeline);
-        if self.kind == "blacklist" { !listed } else { listed }
-    }
 }

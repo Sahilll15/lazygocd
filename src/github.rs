@@ -21,7 +21,10 @@ pub fn resolve_token(configured: Option<String>) -> Option<String> {
     if configured.as_deref().is_some_and(|t| !t.trim().is_empty()) {
         return configured;
     }
-    let out = std::process::Command::new("gh").args(["auth", "token"]).output().ok()?;
+    let out = std::process::Command::new("gh")
+        .args(["auth", "token"])
+        .output()
+        .ok()?;
     if !out.status.success() {
         return None;
     }
@@ -36,7 +39,11 @@ impl GitHubClient {
             .connect_timeout(std::time::Duration::from_secs(8))
             .build()
             .context("building GitHub HTTP client")?;
-        Ok(GitHubClient { client, token: resolve_token(token), api_base: api_base.trim_end_matches('/').to_string() })
+        Ok(GitHubClient {
+            client,
+            token: resolve_token(token),
+            api_base: api_base.trim_end_matches('/').to_string(),
+        })
     }
 
     /// Latest commit SHA on a branch. Works unauthenticated for public repos
@@ -57,7 +64,10 @@ impl GitHubClient {
         let status = resp.status();
         let body = resp.text().context("reading GitHub response body")?;
         if !status.is_success() {
-            anyhow::bail!("GitHub returned {status} for {owner}/{repo}@{branch}: {}", truncate(&body));
+            anyhow::bail!(
+                "GitHub returned {status} for {owner}/{repo}@{branch}: {}",
+                truncate(&body)
+            );
         }
         let parsed: CommitResponse = serde_json::from_str(&body)
             .with_context(|| format!("parsing GitHub commit response: {}", truncate(&body)))?;
