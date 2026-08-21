@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Keybindings — lazygocd</title>
+<meta name="description" content="The full lazygocd keybinding reference, grouped by context: global, groups pane, history pane, details pane, and the console log view.">
+<meta name="theme-color" content="#0a0f14">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='2' y='2' width='60' height='60' rx='14' fill='%230b1117' stroke='%233fd5e6' stroke-width='4'/%3E%3Cpath d='M17 23l11 9-11 9' fill='none' stroke='%233fd5e6' stroke-width='6' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M33 41h13' stroke='%233fd5e6' stroke-width='6' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap header-row">
+    <a class="brand" href="/" aria-label="lazygocd home">
+      <span class="brand-badge">lazygocd</span><span class="led" aria-hidden="true"></span>
+    </a>
+    <button class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+    <nav class="site-nav" id="site-nav" aria-label="Site">
+      <a href="/install">install</a>
+      <a href="/quickstart">quickstart</a>
+      <a href="/keybindings" class="active">keybindings</a>
+      <a href="/features">features</a>
+      <a href="/changelog">changelog</a>
+      <a href="/troubleshooting">troubleshooting</a>
+      <a class="nav-gh" href="https://github.com/Sahilll15/lazygocd">GitHub &nearr;</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div class="page-hero wrap">
+    <div class="crumb"><span class="tilde">~</span>/lazygocd/keybindings</div>
+    <h1>Keybindings</h1>
+    <p class="lede">You never need this page memorized: the footer inside the app always shows the keys for the focused pane, and <kbd>?</kbd> opens the full list. This is the same reference, grouped by context.</p>
+  </div>
+
+  <section>
+    <div class="wrap" style="max-width:900px">
+
+      <fieldset class="panel accent">
+        <legend>global</legend>
+        <div class="tblwrap">
+          <table class="tbl">
+            <thead><tr><th style="width:34%">Key</th><th>Action</th></tr></thead>
+            <tbody>
+              <tr><td><kbd>tab</kbd></td><td>Cycle focus: groups &rarr; history &rarr; details &rarr; groups</td></tr>
+              <tr><td><kbd>esc</kbd></td><td>Back one level: details &rarr; history &rarr; groups; in the groups pane, clears the filter</td></tr>
+              <tr><td><kbd>r</kbd></td><td>Refresh</td></tr>
+              <tr><td><kbd>A</kbd></td><td>Connect / reconnect GoCD (reopens the connect form)</td></tr>
+              <tr><td><kbd>@</kbd></td><td>Connect GitHub (optional, for private-repo commit checks)</td></tr>
+              <tr><td><kbd>?</kbd></td><td>Toggle help</td></tr>
+              <tr><td><kbd>q</kbd> <kbd>ctrl</kbd>+<kbd>c</kbd></td><td>Quit</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </fieldset>
+
+      <fieldset class="panel accent">
+        <legend>movement &middot; any focused list</legend>
+        <div class="tblwrap">
+          <table class="tbl">
+            <thead><tr><th style="width:34%">Key</th><th>Action</th></tr></thead>
+            <tbody>
+              <tr><td><kbd>j</kbd>/<kbd>k</kbd> &nbsp; <kbd>&darr;</kbd>/<kbd>&uarr;</kbd></td><td>Move selection</td></tr>
+              <tr><td><kbd>g</kbd>/<kbd>G</kbd></td><td>Jump to top / bottom of the focused list</td></tr>
+              <tr><td><kbd>ctrl</kbd>+<kbd>d</kbd>/<kbd>ctrl</kbd>+<kbd>u</kbd> &nbsp; <kbd>pgdn</kbd>/<kbd>pgup</kbd></td><td>Half-page down / up</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </fieldset>
+
+      <fieldset class="panel accent">
+        <legend>groups pane</legend>
+        <div class="tblwrap">
+          <table class="tbl">
+            <thead><tr><th style="width:34%">Key</th><th>Action</th></tr></thead>
+            <tbody>
+              <tr><td><kbd>l</kbd> <kbd>enter</kbd> <kbd>&rarr;</kbd></td><td>Expand the selected group, or open the selected pipeline's history</td></tr>
+              <tr><td><kbd>h</kbd> <kbd>&larr;</kbd></td><td>Collapse the selected group</td></tr>
+              <tr><td><kbd>/</kbd></td><td>Fuzzy-filter pipelines by name, across all groups, matched characters highlighted</td></tr>
+              <tr><td><kbd>v</kbd></td><td>Open your GoCD personalized dashboard views, the same custom tabs from the web UI</td></tr>
+              <tr><td><kbd>V</kbd></td><td>Save the current <kbd>/</kbd> filter matches as a new GoCD view</td></tr>
+              <tr><td><kbd>y</kbd></td><td>Copy: commit SHA (history/details), pipeline or group name (tree), artifact URL (job view)</td></tr>
+              <tr><td><kbd>T</kbd></td><td>Trigger with environment variables (NAME=VALUE form); plain <kbd>t</kbd> triggers as-is</td></tr>
+              <tr><td><kbd>R</kbd></td><td>Rerun a failed run: <kbd>y</kbd> = failed jobs only, <kbd>a</kbd> = the whole stage</td></tr>
+              <tr><td><kbd>f</kbd></td><td>Star / unstar the selected pipeline as a favorite</td></tr>
+              <tr><td><kbd>t</kbd></td><td>Trigger a new run of the selected pipeline (asks to confirm)</td></tr>
+              <tr><td><kbd>p</kbd></td><td>Pause / unpause the selected pipeline (asks to confirm)</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </fieldset>
+
+      <fieldset class="panel accent">
+        <legend>history pane</legend>
+        <div class="tblwrap">
+          <table class="tbl">
+            <thead><tr><th style="width:34%">Key</th><th>Action</th></tr></thead>
+            <tbody>
+              <tr><td><kbd>tab</kbd></td><td>Move focus into the details pane</td></tr>
+              <tr><td><kbd>esc</kbd></td><td>Back to the groups pane</td></tr>
+              <tr><td><kbd>X</kbd></td><td>Cancel the currently running stage of the open pipeline (asks to confirm; only offered while a stage is actually active)</td></tr>
+              <tr><td><kbd>o</kbd></td><td>Open the selected run&#39;s commit on GitHub, or the pending deployed...head diff when the latest deploy is behind</td></tr>
+              <tr><td><kbd>t</kbd> <kbd>p</kbd> <kbd>f</kbd></td><td>Trigger / pause / favorite, same as in the groups pane</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </fieldset>
+
+      <fieldset class="panel accent">
+        <legend>details pane</legend>
+        <div class="tblwrap">
+          <table class="tbl">
+            <thead><tr><th style="width:34%">Key</th><th>Action</th></tr></thead>
+            <tbody>
+              <tr><td><kbd>enter</kbd></td><td>Open the selected job's console log</td></tr>
+              <tr><td><kbd>esc</kbd></td><td>Back to the history pane</td></tr>
+              <tr><td><kbd>X</kbd></td><td>Cancel the currently running stage (asks to confirm)</td></tr>
+              <tr><td><kbd>o</kbd></td><td>Open the selected run&#39;s commit on GitHub</td></tr>
+              <tr><td><kbd>t</kbd> <kbd>p</kbd> <kbd>f</kbd></td><td>Trigger / pause / favorite, same as elsewhere</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </fieldset>
+
+      <fieldset class="panel accent">
+        <legend>job view (console / artifacts / materials)</legend>
+        <div class="tblwrap">
+          <table class="tbl">
+            <thead><tr><th style="width:34%">Key</th><th>Action</th></tr></thead>
+            <tbody>
+              <tr><td><kbd>tab</kbd> <kbd>1</kbd>-<kbd>3</kbd></td><td>Switch between the Console, Artifacts, and Materials tabs</td></tr>
+              <tr><td><kbd>/</kbd></td><td>Search the log (inline highlight as you type, <kbd>enter</kbd> to confirm)</td></tr>
+              <tr><td><kbd>n</kbd>/<kbd>N</kbd></td><td>Jump to the next / previous search match</td></tr>
+              <tr><td><kbd>j</kbd>/<kbd>k</kbd></td><td>Scroll (Console/Materials) or move the selection (Artifacts)</td></tr>
+              <tr><td><kbd>enter</kbd> <kbd>o</kbd></td><td>Artifacts tab: open the selected file in your browser</td></tr>
+              <tr><td><kbd>g</kbd>/<kbd>G</kbd></td><td>Jump to top / bottom; <kbd>G</kbd> also resumes auto-follow of a live log</td></tr>
+              <tr><td><kbd>r</kbd></td><td>Refresh</td></tr>
+              <tr><td><kbd>q</kbd> <kbd>esc</kbd></td><td>Close the job view</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </fieldset>
+
+      <fieldset class="panel accent">
+        <legend>mouse</legend>
+        <div class="tblwrap">
+          <table class="tbl">
+            <thead><tr><th style="width:34%">Input</th><th>Action</th></tr></thead>
+            <tbody>
+              <tr><td><kbd>click</kbd></td><td>Focus the pane and select the clicked row; clicking an already-selected row opens it</td></tr>
+              <tr><td><kbd>wheel</kbd></td><td>Scroll the pane under the cursor, or the console log when it's open</td></tr>
+              <tr><td><kbd>hover</kbd></td><td>Resting on a pipeline row for ~300ms prefetches its history in the background</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </fieldset>
+
+      <div class="callout good">
+        <span class="co-label">muscle memory included</span>
+        If you already use vim, k9s, or similar tools, your fingers know most of this: <kbd>j</kbd>/<kbd>k</kbd> movement, <kbd>g</kbd>/<kbd>G</kbd> jumps, <kbd>ctrl</kbd>+<kbd>d</kbd>/<kbd>ctrl</kbd>+<kbd>u</kbd> paging, <kbd>/</kbd> to filter, and <kbd>esc</kbd> to back out of anything.
+      </div>
+
+      <div class="next-links">
+        <a class="btn btn-primary" href="/features">Feature deep-dives</a>
+        <a class="btn btn-ghost" href="/changelog">Changelog</a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="tui-strip" aria-hidden="true">
+    <div class="wrap"><span><b>j/k</b> move</span><span><b>enter</b> open</span><span><b>t</b> trigger</span><span><b>p</b> pause</span><span><b>f</b> favorite</span><span><b>/</b> filter</span><span><b>X</b> cancel</span><span><b>A</b> gocd</span><span><b>@</b> github</span><span><b>?</b> help</span><span><b>q</b> quit</span></div>
+  </div>
+  <div class="wrap foot-row">
+    <div class="foot-left"><span class="brand-badge sm">lazygocd</span><span>MIT license</span></div>
+    <div class="foot-links">
+      <a href="https://github.com/Sahilll15/lazygocd">source &nearr;</a>
+      <a href="https://github.com/Sahilll15/lazygocd/issues">issues &nearr;</a>
+      <a href="https://www.gocd.org/">GoCD &nearr;</a>
+      <a href="https://ratatui.rs/">ratatui &nearr;</a>
+    </div>
+  </div>
+</footer>
+
+<script src="/site.js"></script>
+</body>
+</html>

@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Changelog - lazygocd</title>
+<meta name="description" content="Release history for lazygocd, including personalized GoCD dashboard views, live verification, Snyk CI scanning, and earlier feature releases.">
+<meta name="theme-color" content="#0a0f14">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='2' y='2' width='60' height='60' rx='14' fill='%230b1117' stroke='%233fd5e6' stroke-width='4'/%3E%3Cpath d='M17 23l11 9-11 9' fill='none' stroke='%233fd5e6' stroke-width='6' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M33 41h13' stroke='%233fd5e6' stroke-width='6' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap header-row">
+    <a class="brand" href="/" aria-label="lazygocd home">
+      <span class="brand-badge">lazygocd</span><span class="led" aria-hidden="true"></span>
+    </a>
+    <button class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+    <nav class="site-nav" id="site-nav" aria-label="Site">
+      <a href="/install">install</a>
+      <a href="/quickstart">quickstart</a>
+      <a href="/keybindings">keybindings</a>
+      <a href="/features">features</a>
+      <a href="/changelog" class="active">changelog</a>
+      <a href="/troubleshooting">troubleshooting</a>
+      <a class="nav-gh" href="https://github.com/Sahilll15/lazygocd">GitHub &nearr;</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div class="page-hero wrap">
+    <div class="crumb"><span class="tilde">~</span>/lazygocd/changelog</div>
+    <h1>Changelog</h1>
+    <p class="lede">Every shipped lazygocd release, rendered from the project changelog. Use this page to track what changed before upgrading with Homebrew, cargo, or a release binary.</p>
+  </div>
+
+  <section>
+    <div class="wrap changelog-wrap">
+      <article class="release-card unreleased">
+        <header>
+          <span class="release-tag">Unreleased</span>
+          <h2>Security workflow</h2>
+        </header>
+        <ul>
+          <li>Snyk CI integration added: generates a CycloneDX SBOM for Cargo dependencies and scans it with <code>snyk sbom test</code> when <code>SNYK_TOKEN</code> is configured.</li>
+        </ul>
+      </article>
+
+      <article class="release-card">
+        <header>
+          <span class="release-tag">v0.4.1</span>
+          <time datetime="2026-08-21">2026-08-21</time>
+          <h2>Verified release and fixed release runners</h2>
+        </header>
+        <ul>
+          <li>Release verification against a live GoCD 23.5.0 server passed: creating a temporary personalized view, loading it through server-side <code>viewName</code> filtering, and removing it again all worked.</li>
+          <li>Release workflow fixed for current GitHub-hosted macOS Intel runners: <code>macos-15-intel</code> replaced the retired <code>macos-13</code> image.</li>
+          <li>Rust sources formatted with <code>cargo fmt</code>; unused personalized-view helper removed.</li>
+        </ul>
+      </article>
+
+      <article class="release-card">
+        <header>
+          <span class="release-tag">v0.4.0</span>
+          <time datetime="2026-08-21">2026-08-21</time>
+          <h2>Personalized dashboard views</h2>
+        </header>
+        <ul>
+          <li><kbd>v</kbd> opens a picker of your GoCD web dashboard views, filtered server-side with <code>viewName</code> and shown in the header when active.</li>
+          <li><kbd>V</kbd> saves the current <kbd>/</kbd> filter matches as a new whitelist view on the GoCD server, visible in the web UI too.</li>
+          <li>View writes use <code>If-Match</code> so concurrent web UI edits fail loudly instead of being silently overwritten.</li>
+          <li><code>CHANGELOG.md</code> introduced with the full release history to date.</li>
+        </ul>
+      </article>
+
+      <article class="release-card">
+        <header>
+          <span class="release-tag">v0.3.0</span>
+          <time datetime="2026-08-21">2026-08-21</time>
+          <h2>P1 feature wave</h2>
+        </header>
+        <ul>
+          <li><kbd>R</kbd> reruns a failed run: <kbd>y</kbd> for failed jobs only, <kbd>a</kbd> for the whole stage.</li>
+          <li><kbd>T</kbd> triggers with environment variables.</li>
+          <li>History pagination loads older runs as you reach the bottom, while background refreshes keep the paginated tail.</li>
+          <li>Every git material is checked and shown, not just the first.</li>
+          <li>GitHub Enterprise support via <code>github_api_base</code>.</li>
+          <li>Desktop notifications when a favorited pipeline starts failing.</li>
+          <li>Homebrew bottle support so <code>brew install</code> can pour a prebuilt binary.</li>
+        </ul>
+      </article>
+
+      <article class="release-card">
+        <header>
+          <span class="release-tag">v0.2.0</span>
+          <time datetime="2026-08-21">2026-08-21</time>
+          <h2>Performance and CLI polish</h2>
+        </header>
+        <ul>
+          <li>Incremental console tailing with <code>?startLineNumber</code> and ETag/304 dashboard polls for near-zero steady-state network cost.</li>
+          <li><kbd>y</kbd> copies commit SHA, pipeline/group names, and artifact URLs via OSC 52.</li>
+          <li><code>--version</code>, <code>--help</code>, <code>--config-dir</code>, and <code>$XDG_CONFIG_HOME</code> support.</li>
+          <li>Built-in shell completions and man page subcommands.</li>
+          <li>CI on pushes and pull requests; Windows job in the release pipeline.</li>
+        </ul>
+      </article>
+
+      <article class="release-card">
+        <header>
+          <span class="release-tag">v0.1.4</span>
+          <time datetime="2026-08-21">2026-08-21</time>
+          <h2>Bug bash</h2>
+        </header>
+        <ul>
+          <li>Fixed three UTF-8 panics in console rendering, search highlighting, and materials.</li>
+          <li>Fixed reconnect state leak, global ctrl-c handling, materials scroll, and favorites prefetch.</li>
+        </ul>
+      </article>
+
+      <article class="release-card">
+        <header>
+          <span class="release-tag">v0.1.3</span>
+          <time datetime="2026-08-21">2026-08-21</time>
+          <h2>Job tabs and log search</h2>
+        </header>
+        <ul>
+          <li>Tabbed job view: Console, Artifacts, and Materials.</li>
+          <li>Console log search with inline highlighting and <kbd>n</kbd>/<kbd>N</kbd> match jumping.</li>
+          <li>Severity-colored logs: failures red, warnings yellow, passes green, agent chatter dimmed.</li>
+        </ul>
+      </article>
+
+      <article class="release-card">
+        <header>
+          <span class="release-tag">v0.1.2</span>
+          <time datetime="2026-08-21">2026-08-21</time>
+          <h2>Run counters</h2>
+        </header>
+        <ul>
+          <li>Run counter shown alongside the label so timer reruns of one commit stay distinguishable.</li>
+        </ul>
+      </article>
+
+      <article class="release-card">
+        <header>
+          <span class="release-tag">v0.1.1</span>
+          <time datetime="2026-08-21">2026-08-21</time>
+          <h2>GitHub open action</h2>
+        </header>
+        <ul>
+          <li><kbd>o</kbd> opens the run's commit on GitHub, or the pending diff when the deployed run is behind.</li>
+          <li>GitHub token picked up from <code>gh auth token</code> automatically.</li>
+        </ul>
+      </article>
+
+      <article class="release-card">
+        <header>
+          <span class="release-tag">v0.1.0</span>
+          <time datetime="2026-08-21">2026-08-21</time>
+          <h2>Initial release</h2>
+        </header>
+        <ul>
+          <li>Three-pane dashboard, trigger/pause/unpause/cancel, live console logs with tail-follow, fuzzy filter, favorites, mouse, GitHub stale-deploy check, and instant startup from a disk cache.</li>
+        </ul>
+      </article>
+
+      <div class="next-links">
+        <a class="btn btn-primary" href="/install">Install latest</a>
+        <a class="btn btn-ghost" href="https://github.com/Sahilll15/lazygocd/releases">GitHub releases &nearr;</a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="tui-strip" aria-hidden="true">
+    <div class="wrap"><span><b>j/k</b> move</span><span><b>enter</b> open</span><span><b>t</b> trigger</span><span><b>p</b> pause</span><span><b>f</b> favorite</span><span><b>/</b> filter</span><span><b>v</b> views</span><span><b>V</b> save view</span><span><b>?</b> help</span><span><b>q</b> quit</span></div>
+  </div>
+  <div class="wrap foot-row">
+    <div class="foot-left"><span class="brand-badge sm">lazygocd</span><span>MIT license</span></div>
+    <div class="foot-links">
+      <a href="https://github.com/Sahilll15/lazygocd">source &nearr;</a>
+      <a href="https://github.com/Sahilll15/lazygocd/issues">issues &nearr;</a>
+      <a href="https://www.gocd.org/">GoCD &nearr;</a>
+      <a href="https://ratatui.rs/">ratatui &nearr;</a>
+    </div>
+  </div>
+</footer>
+
+<script src="/site.js"></script>
+</body>
+</html>
