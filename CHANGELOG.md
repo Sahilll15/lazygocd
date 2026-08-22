@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.5.0
+## v0.5.0 - 2026-08-22
 
 Interface pass. The tool had grown from six keybindings to fourteen without
 the layout being revisited.
@@ -22,12 +22,8 @@ the layout being revisited.
   claiming the server has no views. `g`/`G` jump to the ends of the picker.
 - Error text no longer echoes raw HTML when a proxy or gateway answers instead
   of GoCD, and 403 / timeout errors suggest a likely cause.
-
-## Unreleased
-
-- Snyk CI integration added: generates a CycloneDX SBOM for Cargo
-  dependencies and scans it with `snyk sbom test` when `SNYK_TOKEN` is
-  configured
+- Snyk CI integration: generates a CycloneDX SBOM for Cargo dependencies and
+  scans it with `snyk sbom test` when `SNYK_TOKEN` is configured.
 
 ## v0.4.1 - 2026-08-21
 
