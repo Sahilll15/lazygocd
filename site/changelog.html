@@ -40,6 +40,7 @@
       <a href="/features">features</a>
       <a href="/changelog" class="active">changelog</a>
       <a href="/troubleshooting">troubleshooting</a>
+      <a href="/blog">blog</a>
       <a class="nav-gh" href="https://github.com/Sahilll15/lazygocd">GitHub &nearr;</a>
     </nav>
   </div>
@@ -57,15 +58,22 @@
       <fieldset class="panel accent changelog-panel">
         <legend>release timeline</legend>
         <div class="timeline">
-          <article class="release-item unreleased">
+          <article class="release-item">
             <div class="release-meta">
               <span class="release-dot" aria-hidden="true"></span>
-              <span class="release-tag">Unreleased</span>
+              <span class="release-tag">v0.5.0</span>
+              <time datetime="2026-08-22">2026-08-22</time>
             </div>
             <div class="release-body">
-              <h2>Security workflow</h2>
+              <h2>Interface pass</h2>
               <ul>
-                <li>Snyk CI integration added: generates a CycloneDX SBOM for Cargo dependencies and scans it with <code>snyk sbom test</code> when <code>SNYK_TOKEN</code> is configured.</li>
+                <li>The footer shows only what the focused pane can do, six hints labelled with the pane, instead of fourteen that ran off the edge of the screen. Keys that change server state render red.</li>
+                <li>One header line instead of two: host name in place of the full URL, with the fleet counts promoted into it. The row below is now a dedicated message line, so an error gets full width instead of being cut off mid-sentence.</li>
+                <li><code>?</code> help is grouped into four task blocks across two columns, 16 lines down from 35, with a legend for the status glyphs.</li>
+                <li>Confirm dialogs lead with the target, pipeline name and run number, on its own line before the action.</li>
+                <li>Pressing <code>v</code> after a failed views fetch reports the failure instead of claiming the server has no views. <code>g</code>/<code>G</code> jump to the ends of the picker.</li>
+                <li>Error text no longer echoes raw HTML when a proxy answers instead of GoCD; 403 and timeout errors suggest a likely cause.</li>
+                <li>Snyk CI integration: generates a CycloneDX SBOM for Cargo dependencies and scans it with <code>snyk sbom test</code> when <code>SNYK_TOKEN</code> is configured.</li>
               </ul>
             </div>
           </article>

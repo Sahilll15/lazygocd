@@ -26,6 +26,7 @@
   --mono:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
   --sans:'IBM Plex Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;
   --wrap:1100px;
+  --measure:940px;
 }
 
 *,*::before,*::after{box-sizing:border-box}
@@ -62,6 +63,8 @@ h1,h2,h3,h4{font-family:var(--mono);color:var(--bright);line-height:1.25;margin:
 h1{font-size:clamp(2.1rem,5.4vw,3.4rem);font-weight:800;letter-spacing:-.02em}
 h2{font-size:clamp(1.3rem,2.6vw,1.65rem);font-weight:700;margin-top:0}
 h2::before{content:"## ";color:var(--faint);font-weight:700}
+/* entry titles in the changelog timeline are h2 but are not sections */
+.release-body h2::before{content:none}
 h3{font-size:1.08rem;font-weight:700;margin-top:0}
 h3::before{content:"\25B8  ";color:var(--cyan)}
 p{margin:0 0 1em}
@@ -86,7 +89,14 @@ code{
 .small{font-size:.86rem;color:var(--muted)}
 
 .wrap{max-width:var(--wrap);margin:0 auto;padding:0 22px}
-section{margin:88px 0}
+section{margin:64px 0}
+
+/* Doc pages (anything with a page hero) share one measure between the hero and
+   the content below it. Without this the h1 sat in a 1100px container while
+   content sat in 860-960px, so their left edges never lined up. */
+main:has(.page-hero) .wrap{max-width:var(--measure)}
+/* The hero already supplies the breathing room above the first block. */
+main:has(.page-hero) > section:first-of-type{margin-top:24px}
 .sec-lede{color:var(--muted);max-width:44em;margin-bottom:2em}
 
 /* ---------- kbd keys ---------- */
@@ -341,7 +351,15 @@ fieldset.t-panel.is-focused>legend{color:var(--cyan)}
   padding:0 4px;border-radius:4px;
 }
 .hrow span{white-space:pre;overflow:hidden;min-width:0}
-.hrow.hhead{color:var(--muted);font-weight:700}
+.hrow.hhead{
+  color:var(--muted);
+  font-weight:700;
+  font-size:.72rem;
+  letter-spacing:.09em;
+  padding-bottom:7px;
+  margin-bottom:5px;
+  border-bottom:1px solid var(--border);
+}
 .hrow.is-selected{background:var(--selbg);font-weight:700;color:var(--bright)}
 
 .t-foot{
@@ -449,7 +467,7 @@ fieldset.t-panel.is-focused>legend{color:var(--cyan)}
 .demo-placeholder .dp-sub{font-size:.84rem;margin-top:6px}
 
 /* ---------- page hero (subpages) ---------- */
-.page-hero{padding:62px 0 8px}
+.page-hero{padding:50px 0 4px}
 .page-hero .crumb{
   font-family:var(--mono);font-size:.82rem;color:var(--faint);margin-bottom:14px;
 }
@@ -510,7 +528,7 @@ fieldset.t-panel.is-focused>legend{color:var(--cyan)}
 .next-links{display:flex;gap:14px;flex-wrap:wrap;margin-top:44px}
 
 /* ---------- changelog ---------- */
-.changelog-wrap{max-width:960px}
+.changelog-wrap{max-width:var(--measure)}
 .changelog-panel{background:rgba(12,18,25,.42)}
 .timeline{
   position:relative;
@@ -521,7 +539,7 @@ fieldset.t-panel.is-focused>legend{color:var(--cyan)}
 .timeline::before{
   content:"";
   position:absolute;
-  left:157px;
+  left:112px;
   top:18px;
   bottom:18px;
   width:1px;
@@ -530,8 +548,8 @@ fieldset.t-panel.is-focused>legend{color:var(--cyan)}
 .release-item{
   position:relative;
   display:grid;
-  grid-template-columns:132px 1fr;
-  gap:34px;
+  grid-template-columns:88px 1fr;
+  gap:26px;
   padding:0 0 28px;
 }
 .release-item:last-child{padding-bottom:0}
@@ -545,7 +563,7 @@ fieldset.t-panel.is-focused>legend{color:var(--cyan)}
 }
 .release-dot{
   position:absolute;
-  right:-43px;
+  right:-31px;
   top:12px;
   width:12px;
   height:12px;
@@ -691,3 +709,9 @@ fieldset.t-panel.is-focused>legend{color:var(--cyan)}
   *,*::before,*::after{animation-duration:.01ms !important;animation-iteration-count:1 !important;transition-duration:.01ms !important}
   html{scroll-behavior:auto}
 }
+
+
+/* Long-form prose: constrain the line length on the text itself rather than the
+   container, so the page title and body still share a left edge. */
+.prose > p,.prose > ul,.prose > ol{max-width:70ch}
+.prose h2{margin-top:2em}

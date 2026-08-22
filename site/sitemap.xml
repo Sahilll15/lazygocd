@@ -28,4 +28,12 @@
     <loc>https://lazygocd.vercel.app/troubleshooting</loc>
     <lastmod>2026-08-21</lastmod>
   </url>
+  <url>
+    <loc>https://lazygocd.vercel.app/blog</loc>
+    <lastmod>2026-08-22</lastmod>
+  </url>
+  <url>
+    <loc>https://lazygocd.vercel.app/building-lazygocd</loc>
+    <lastmod>2026-08-22</lastmod>
+  </url>
 </urlset>
