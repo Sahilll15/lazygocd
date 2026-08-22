@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.6.0 - 2026-08-22
 
 - `--demo` launches the interface with fictional pipelines: no server, no
   credentials, and nothing written to disk. Fixtures are parsed by the same
