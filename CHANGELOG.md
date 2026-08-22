@@ -24,6 +24,8 @@ the layout being revisited.
   of GoCD, and 403 / timeout errors suggest a likely cause.
 - Snyk CI integration: generates a CycloneDX SBOM for Cargo dependencies and
   scans it with `snyk sbom test` when `SNYK_TOKEN` is configured.
+- Published to crates.io, so `cargo install lazygocd` works without pointing
+  cargo at the git repository.
 
 ## v0.4.1 - 2026-08-21
 
