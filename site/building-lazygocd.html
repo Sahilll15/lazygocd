@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Building lazygocd — lazygocd blog</title>
+<meta name="description" content="Why the GoCD web dashboard stops working past a few thousand pipelines, what its REST API actually looks like, and what breaks when you turn that into a terminal UI.">
+<meta name="theme-color" content="#0a0f14">
+<link rel="canonical" href="https://lazygocd.vercel.app/building-lazygocd">
+<meta property="og:title" content="Building a lazygit-style terminal UI for GoCD in Rust">
+<meta property="og:description" content="Why the GoCD web dashboard stops working past a few thousand pipelines, what its REST API actually looks like, and what breaks when you turn that into a terminal UI.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://lazygocd.vercel.app/building-lazygocd">
+<meta property="og:site_name" content="lazygocd">
+<meta property="og:image" content="https://lazygocd.vercel.app/demo-poster.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Building a lazygit-style terminal UI for GoCD in Rust">
+<meta name="twitter:image" content="https://lazygocd.vercel.app/demo-poster.png">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='2' y='2' width='60' height='60' rx='14' fill='%230b1117' stroke='%233fd5e6' stroke-width='4'/%3E%3Cpath d='M17 23l11 9-11 9' fill='none' stroke='%233fd5e6' stroke-width='6' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M33 41h13' stroke='%233fd5e6' stroke-width='6' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap header-row">
+    <a class="brand" href="/" aria-label="lazygocd home">
+      <span class="brand-badge">lazygocd</span><span class="led" aria-hidden="true"></span>
+    </a>
+    <button class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+    <nav class="site-nav" id="site-nav" aria-label="Site">
+      <a href="/install">install</a>
+      <a href="/quickstart">quickstart</a>
+      <a href="/keybindings">keybindings</a>
+      <a href="/features">features</a>
+      <a href="/changelog">changelog</a>
+      <a href="/troubleshooting">troubleshooting</a>
+      <a href="/blog" class="active">blog</a>
+      <a class="nav-gh" href="https://github.com/Sahilll15/lazygocd">GitHub &nearr;</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div class="page-hero wrap">
+    <div class="crumb"><a href="/blog">~/lazygocd/blog</a> / building-lazygocd</div>
+    <h1>Building a lazygit-style terminal UI for GoCD in Rust</h1>
+    <p class="lede">2026-08-22 &middot; the GoCD API, an instant-feeling TUI, and the bugs a bug bash actually found.</p>
+  </div>
+
+  <section>
+    <div class="wrap prose">
+
+      <p>I watch pipelines for a living, or close enough to it. GoCD's web dashboard is fine at a few dozen pipelines. It is not fine at 2,400, which is roughly where our instance sits. Every trigger, every log tail, every "did that deploy actually go out" check meant a page load. So I built <a href="https://github.com/Sahilll15/lazygocd">lazygocd</a>: the lazygit idea, applied to GoCD instead of git.</p>
+
+      <h2>What the API actually looks like</h2>
+      <p>GoCD's docs describe the shape of the API. Reading real responses from a real 2,400-pipeline server told me the rest.</p>
+      <p>The obvious approach, one status call per pipeline, doesn't scale: that's thousands of requests just to draw a dashboard. GoCD's <code>/api/dashboard</code> endpoint returns every group, every pipeline, and the latest run's status in one call. One request, one JSON blob, done. The versioned Accept header matters more than the docs suggest, too: <code>application/vnd.go.cd.v4+json</code> against that same endpoint returns the personalization envelope; drop a version and you get a different (often older, sometimes broken) response shape.</p>
+      <p>Some of the more useful endpoints aren't in the public docs at all. GoCD's own web dashboard has personalized views, the tabs you build yourself to slice thousands of pipelines down to the ones you own. That's <code>/api/internal/pipeline_selection</code>, an "internal" endpoint with no version header, guarded by an ETag on writes:</p>
+      <pre><code>GET  /api/internal/pipeline_selection      # your saved views + ETag
+PUT  /api/internal/pipeline_selection      # If-Match: &lt;etag&gt;, upsert by name
+GET  /api/dashboard?viewName=my-view       # server-side filtered dashboard</code></pre>
+      <p>Once I found that, lazygocd could read the views you'd already built in the web UI and let you switch between them with <kbd>v</kbd>, or save the pipelines matching a fuzzy filter as a new one with <kbd>V</kbd>. Nothing about that is documented. It's just what the web dashboard itself calls, visible in the network tab.</p>
+
+      <h2>Making it feel instant</h2>
+      <p>Fast and instant are different things. A dashboard call that takes two seconds is fast. Waiting two seconds every time you open the tool is not instant, and it's the difference that makes a TUI feel like a reflex instead of a chore.</p>
+      <ul>
+        <li><b>Disk cache on launch.</b> The last dashboard payload is cached to <code>~/.config/lazygocd/</code>. The tool paints from that cache immediately, then refreshes over it in the background. You never stare at a spinner on a tool you already used ten minutes ago.</li>
+        <li><b>ETag polling.</b> The steady-state refresh sends <code>If-None-Match</code> with the last ETag. When nothing changed, which is most of the time, GoCD answers 304 with an empty body instead of the full multi-megabyte payload. Idle polling costs almost nothing.</li>
+        <li><b>Incremental log tailing.</b> <code>/files/.../console.log</code> takes a <code>?startLineNumber=N</code> query param. Following a running job's log used to mean re-downloading the whole file every three seconds; now it fetches only the lines that are new.</li>
+        <li><b>Hover-prefetch.</b> Resting the cursor on a pipeline for 300ms starts loading its history in the background, so by the time you press enter it's already there.</li>
+      </ul>
+      <p>None of these are exotic. They're the same handful of tricks every fast CLI tool uses. The GoCD API just happens to support all of them, once you go looking.</p>
+
+      <h2>What a bug bash actually found</h2>
+      <p>Testing a TUI is not like testing a web app. There's no browser devtools, no obvious "what did the user click." So the sharpest bugs came from an adversarial pass: a hostile mock server feeding the real binary unicode, malformed timestamps, and chaos-mashed input in a tmux session, with the real panics captured.</p>
+      <p>The most instructive one: a line like <code>12:34:56 日本語テスト</code> looks like a timestamp followed by plain text. The code sniffed the first 13 bytes as a timestamp and split the string there. Byte 13 landed in the middle of a multibyte character. Rust panics hard on that, correctly, because slicing a string mid-character is undefined behavior for that type. The fix wasn't a special case for Japanese text; it was checking <code>is_char_boundary</code> before ever assuming an ASCII-width timestamp.</p>
+      <p>The search-highlight bug was subtler. Case-insensitive matching lowercased the line, searched the lowercased copy, then applied those byte offsets back to the <em>original</em> string. That works until a character's lowercase form has a different byte length than its uppercase form, at which point the offsets silently drift out from under you. The real fix was a matcher that walks both strings in lockstep by character, never by an offset borrowed from a different string.</p>
+      <div class="callout">
+        <span class="co-label">the actual lesson</span>
+        Every crash traced back to treating a string as an array of bytes you can slice anywhere, when the content of that string was never guaranteed to be ASCII. GoCD build logs come from real build tools, and real build tools quote file paths, commit messages, and error text in whatever encoding the developer used. Assuming ASCII is a bet you will eventually lose.
+      </div>
+
+      <h2>Where it's going</h2>
+      <p>The list of "what's next" came out of the same research pass as the bug bash: reading every peer TUI's feature set, and reading GoCD's API surface for the parts lazygocd doesn't touch yet. A few of the smaller, well-scoped pieces are open for anyone who wants to dig in:</p>
+      <ul>
+        <li><a href="https://github.com/Sahilll15/lazygocd/issues/1">Server health indicator in the status bar</a></li>
+        <li><a href="https://github.com/Sahilll15/lazygocd/issues/2">Compare two runs (material diff between counters)</a></li>
+        <li><a href="https://github.com/Sahilll15/lazygocd/issues/3">Headless mode: <code>lazygocd status --json</code></a></li>
+      </ul>
+      <p>If you run GoCD and any of this sounds familiar, the repo is at <a href="https://github.com/Sahilll15/lazygocd">github.com/Sahilll15/lazygocd</a>, and <a href="/install">installing it</a> is one line.</p>
+
+    </div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="tui-strip" aria-hidden="true">
+    <div class="wrap"><span><b>j/k</b> move</span><span><b>enter</b> open</span><span><b>t</b> trigger</span><span><b>p</b> pause</span><span><b>f</b> favorite</span><span><b>/</b> filter</span><span><b>X</b> cancel</span><span><b>A</b> gocd</span><span><b>@</b> github</span><span><b>?</b> help</span><span><b>q</b> quit</span></div>
+  </div>
+  <div class="wrap foot-row">
+    <div class="foot-left"><span class="brand-badge sm">lazygocd</span><span>MIT license</span></div>
+    <div class="foot-links">
+      <a href="https://github.com/Sahilll15/lazygocd">source &nearr;</a>
+      <a href="https://github.com/Sahilll15/lazygocd/issues">issues &nearr;</a>
+      <a href="https://www.gocd.org/">GoCD &nearr;</a>
+      <a href="https://ratatui.rs/">ratatui &nearr;</a>
+    </div>
+  </div>
+</footer>
+
+<script src="/site.js"></script>
+</body>
+</html>

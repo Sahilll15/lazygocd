@@ -25,6 +25,14 @@
     {
       "source": "/troubleshooting",
       "destination": "/troubleshooting.html"
+    },
+    {
+      "source": "/blog",
+      "destination": "/blog/index.html"
+    },
+    {
+      "source": "/building-lazygocd",
+      "destination": "/building-lazygocd.html"
     }
   ],
   "headers": [

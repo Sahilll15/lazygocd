@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Blog — lazygocd</title>
+<meta name="description" content="Writing about lazygocd: a terminal UI for GoCD, written in Rust.">
+<meta name="theme-color" content="#0a0f14">
+<link rel="canonical" href="https://lazygocd.vercel.app/blog">
+<meta property="og:title" content="Blog — lazygocd">
+<meta property="og:description" content="Writing about lazygocd: a terminal UI for GoCD, written in Rust.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://lazygocd.vercel.app/blog">
+<meta property="og:site_name" content="lazygocd">
+<meta property="og:image" content="https://lazygocd.vercel.app/demo-poster.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Blog — lazygocd">
+<meta name="twitter:image" content="https://lazygocd.vercel.app/demo-poster.png">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='2' y='2' width='60' height='60' rx='14' fill='%230b1117' stroke='%233fd5e6' stroke-width='4'/%3E%3Cpath d='M17 23l11 9-11 9' fill='none' stroke='%233fd5e6' stroke-width='6' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M33 41h13' stroke='%233fd5e6' stroke-width='6' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap header-row">
+    <a class="brand" href="/" aria-label="lazygocd home">
+      <span class="brand-badge">lazygocd</span><span class="led" aria-hidden="true"></span>
+    </a>
+    <button class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+    <nav class="site-nav" id="site-nav" aria-label="Site">
+      <a href="/install">install</a>
+      <a href="/quickstart">quickstart</a>
+      <a href="/keybindings">keybindings</a>
+      <a href="/features">features</a>
+      <a href="/changelog">changelog</a>
+      <a href="/troubleshooting">troubleshooting</a>
+      <a href="/blog" class="active">blog</a>
+      <a class="nav-gh" href="https://github.com/Sahilll15/lazygocd">GitHub &nearr;</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div class="page-hero wrap">
+    <div class="crumb"><span class="tilde">~</span>/lazygocd/blog</div>
+    <h1>Blog</h1>
+    <p class="lede">Notes on building lazygocd: what the GoCD API actually looks like, what broke, and what's next.</p>
+  </div>
+
+  <section>
+    <div class="wrap">
+      <article class="trouble t-cyan">
+        <div class="symptom">Building a lazygit-style terminal UI for GoCD in Rust</div>
+        <div class="fix">
+          <p class="small" style="margin-top:-4px">2026-08-22</p>
+          <p>Why the GoCD web dashboard stops working past a few thousand pipelines, what its REST API actually looks like once you start reading responses instead of docs, and the handful of tricks that make a TUI feel instant instead of just fast.</p>
+          <p><a href="/building-lazygocd">Read the post &nearr;</a></p>
+        </div>
+      </article>
+    </div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="tui-strip" aria-hidden="true">
+    <div class="wrap"><span><b>j/k</b> move</span><span><b>enter</b> open</span><span><b>t</b> trigger</span><span><b>p</b> pause</span><span><b>f</b> favorite</span><span><b>/</b> filter</span><span><b>X</b> cancel</span><span><b>A</b> gocd</span><span><b>@</b> github</span><span><b>?</b> help</span><span><b>q</b> quit</span></div>
+  </div>
+  <div class="wrap foot-row">
+    <div class="foot-left"><span class="brand-badge sm">lazygocd</span><span>MIT license</span></div>
+    <div class="foot-links">
+      <a href="https://github.com/Sahilll15/lazygocd">source &nearr;</a>
+      <a href="https://github.com/Sahilll15/lazygocd/issues">issues &nearr;</a>
+      <a href="https://www.gocd.org/">GoCD &nearr;</a>
+      <a href="https://ratatui.rs/">ratatui &nearr;</a>
+    </div>
+  </div>
+</footer>
+
+<script src="/site.js"></script>
+</body>
+</html>

@@ -10,7 +10,7 @@ keywords = ["gocd", "tui", "ci", "terminal", "pipelines"]
 categories = ["command-line-utilities", "development-tools"]
 readme = "README.md"
 rust-version = "1.88"
-exclude = ["assets/*"]
+exclude = ["assets/*", "site/*"]
 
 [profile.release]
 lto = true
