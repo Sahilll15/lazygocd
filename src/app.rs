@@ -344,6 +344,10 @@ pub struct App {
     /// Mirror of the FIRST material's check, kept for the compare-URL logic.
     pub github_state: GithubState,
 
+    /// `--demo`: fixtures only. Nothing is read from or written to the real
+    /// config directory, so a demo can be screen-shared safely.
+    pub demo: bool,
+
     /// Bumped on reconnect; in-flight responses from a previous server are
     /// dropped when their generation doesn't match.
     pub server_gen: u64,
@@ -424,7 +428,7 @@ impl App {
             server_url: "demo".to_string(),
             ..Config::default()
         };
-        let mut app = Self::build(&cfg, GoCdClient::demo()?, false)?;
+        let mut app = Self::build(&cfg, GoCdClient::demo()?, true)?;
         app.server_url = "demo mode - fictional data, nothing is real".to_string();
         app.status_line = "Demo mode: no server, no credentials. Press ? for keys, q to quit.".to_string();
         Ok(app)
@@ -432,15 +436,15 @@ impl App {
 
     pub fn new(cfg: &Config) -> anyhow::Result<Self> {
         let client = GoCdClient::new(cfg)?;
-        Self::build(cfg, client, true)
+        Self::build(cfg, client, false)
     }
 
-    fn build(cfg: &Config, client: GoCdClient, use_cache: bool) -> anyhow::Result<Self> {
+    fn build(cfg: &Config, client: GoCdClient, demo: bool) -> anyhow::Result<Self> {
         let github = GitHubClient::new(cfg.github_token.clone(), &cfg.github_api_base)?;
         let (tx, rx) = mpsc::channel();
         let needs_setup = cfg.server_url.trim().is_empty();
 
-        let cached = (use_cache && !needs_setup).then(load_dashboard_cache).flatten();
+        let cached = (!demo && !needs_setup).then(load_dashboard_cache).flatten();
         let (groups, pipeline_info, status_line) = match cached {
             Some(c) => {
                 let age = format_age(c.saved_at_ms);
@@ -481,7 +485,17 @@ impl App {
             views: Vec::new(),
             active_view: None,
             views_error: None,
-            favorites: load_favorites(),
+            demo,
+            favorites: if demo {
+                // Real favorites are internal pipeline names. Reading them here
+                // leaked them into a mode built for public screenshots.
+                ["web-app-deploy-prod", "api-build-test"]
+                    .iter()
+                    .map(|s| (*s).to_string())
+                    .collect()
+            } else {
+                load_favorites()
+            },
             favorites_expanded: true,
             filter: String::new(),
             filter_active: false,
@@ -783,7 +797,9 @@ impl App {
                 // A successful load means connectivity is back: drop any stale network
                 // error banner instead of leaving it until the next keypress.
                 self.error_line = None;
-                save_dashboard_cache(groups.clone(), pipelines.clone());
+                if !self.demo {
+                    save_dashboard_cache(groups.clone(), pipelines.clone());
+                }
                 // Re-anchor the cursor by name after the refresh: groups/pipelines can
                 // shift position, and a bare index would land on an unrelated row.
                 let key = self.selection_key();
@@ -1532,7 +1548,8 @@ impl App {
                 self.server_url = cfg.server_url.clone();
                 self.cfg = cfg.clone();
                 self.error_line = None;
-                if let Ok(path) = crate::config::config_path()
+                if !self.demo
+                    && let Ok(path) = crate::config::config_path()
                     && let Err(e) = crate::config::save(&path, &cfg)
                 {
                     self.error_line = Some(format!("Reconnected, but failed to save config: {e}"));
@@ -1593,7 +1610,8 @@ impl App {
                         } else {
                             "GitHub connected".to_string()
                         };
-                        if let Ok(path) = crate::config::config_path()
+                        if !self.demo
+                            && let Ok(path) = crate::config::config_path()
                             && let Err(e) = crate::config::save(&path, &self.cfg)
                         {
                             self.error_line =
@@ -2001,7 +2019,9 @@ impl App {
             self.favorites.insert(name.clone());
             self.status_line = format!("Added {name} to favorites");
         }
-        save_favorites(self.favorites.clone());
+        if !self.demo {
+            save_favorites(self.favorites.clone());
+        }
         self.rebuild_rows();
     }
 

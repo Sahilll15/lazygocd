@@ -272,6 +272,29 @@ mod tests {
         assert_eq!(front.embedded.pipeline_groups.len(), 1);
     }
 
+    // The favorites file holds real internal pipeline names. Demo mode read it
+    // once and rendered them, which is a leak in a mode built for screenshots.
+    #[test]
+    fn demo_seeds_fictional_favorites_and_never_reads_the_real_ones() {
+        let app = crate::app::App::demo().expect("demo app builds");
+        assert!(app.demo);
+        assert!(!app.favorites.is_empty(), "favorites should be seeded for the demo");
+        let fixture_names: Vec<String> =
+            serde_json::from_str::<DashboardResponse>(&super::dashboard_json(None))
+                .unwrap()
+                .embedded
+                .pipelines
+                .into_iter()
+                .map(|p| p.name)
+                .collect();
+        for fav in &app.favorites {
+            assert!(
+                fixture_names.contains(fav),
+                "favorite {fav:?} is not a demo pipeline, so it came from real config"
+            );
+        }
+    }
+
     #[test]
     fn console_log_supports_incremental_tailing() {
         let full = super::console_log(0);
