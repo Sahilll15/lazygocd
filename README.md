@@ -5,6 +5,7 @@
 **A fast, keyboard-driven terminal UI for [GoCD](https://www.gocd.org/) pipelines.**
 
 [![Release](https://img.shields.io/github/v/release/Sahilll15/lazygocd)](https://github.com/Sahilll15/lazygocd/releases)
+[![crates.io](https://img.shields.io/crates/v/lazygocd)](https://crates.io/crates/lazygocd)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/built%20with-Rust-orange)](https://www.rust-lang.org/)
 
