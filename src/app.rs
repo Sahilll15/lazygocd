@@ -418,13 +418,29 @@ fn save_dashboard_cache(groups: Vec<DashboardGroup>, pipelines: Vec<DashboardPip
 const HOVER_PREFETCH_DELAY: Duration = Duration::from_millis(300);
 
 impl App {
+    /// `--demo`: fixture-backed client, no config, no disk cache, no setup form.
+    pub fn demo() -> anyhow::Result<Self> {
+        let cfg = Config {
+            server_url: "demo".to_string(),
+            ..Config::default()
+        };
+        let mut app = Self::build(&cfg, GoCdClient::demo()?, false)?;
+        app.server_url = "demo mode - fictional data, nothing is real".to_string();
+        app.status_line = "Demo mode: no server, no credentials. Press ? for keys, q to quit.".to_string();
+        Ok(app)
+    }
+
     pub fn new(cfg: &Config) -> anyhow::Result<Self> {
         let client = GoCdClient::new(cfg)?;
+        Self::build(cfg, client, true)
+    }
+
+    fn build(cfg: &Config, client: GoCdClient, use_cache: bool) -> anyhow::Result<Self> {
         let github = GitHubClient::new(cfg.github_token.clone(), &cfg.github_api_base)?;
         let (tx, rx) = mpsc::channel();
         let needs_setup = cfg.server_url.trim().is_empty();
 
-        let cached = (!needs_setup).then(load_dashboard_cache).flatten();
+        let cached = (use_cache && !needs_setup).then(load_dashboard_cache).flatten();
         let (groups, pipeline_info, status_line) = match cached {
             Some(c) => {
                 let age = format_age(c.saved_at_ms);

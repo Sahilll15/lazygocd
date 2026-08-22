@@ -1,6 +1,7 @@
 mod api;
 mod app;
 mod config;
+mod demo;
 mod github;
 mod model;
 mod notify;
@@ -15,7 +16,8 @@ use std::time::Duration;
 const LONG_ABOUT: &str = "A fast, keyboard-driven terminal UI for GoCD pipelines. Browse \
 pipeline groups, trigger and monitor runs, drill into stages and jobs, tail console logs, and \
 open builds in the browser without leaving the terminal. Connection details come from \
-config.toml, the in-app setup prompt, or GOCD_* environment variables.";
+config.toml, the in-app setup prompt, or GOCD_* environment variables. \
+Pass --demo to explore the interface with fictional data and no server.";
 
 #[derive(Parser)]
 #[command(name = "lazygocd", version, about, long_about = LONG_ABOUT)]
@@ -23,6 +25,10 @@ struct Cli {
     /// Directory for config.toml and cached state (overrides $XDG_CONFIG_HOME/lazygocd)
     #[arg(long, value_name = "PATH")]
     config_dir: Option<PathBuf>,
+
+    /// Explore the interface with fictional data: no server, no credentials, no config written
+    #[arg(long)]
+    demo: bool,
 
     #[command(subcommand)]
     command: Option<Command>,
@@ -67,15 +73,19 @@ fn main() -> anyhow::Result<()> {
         config::set_config_dir_override(dir);
     }
 
-    let cfg = match config::load() {
-        Ok(cfg) => cfg,
-        Err(e) => {
-            eprintln!("{e}");
-            std::process::exit(1);
-        }
+    // Demo mode never reads config or the cache, so it works on a fresh machine.
+    let mut app = if cli.demo {
+        App::demo()?
+    } else {
+        let cfg = match config::load() {
+            Ok(cfg) => cfg,
+            Err(e) => {
+                eprintln!("{e}");
+                std::process::exit(1);
+            }
+        };
+        App::new(&cfg)?
     };
-
-    let mut app = App::new(&cfg)?;
 
     let mut terminal = ratatui::init();
     let _ = crossterm::execute!(std::io::stdout(), EnableMouseCapture);
