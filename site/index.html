@@ -3,25 +3,120 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>lazygocd — a fast terminal UI for GoCD</title>
-<meta name="description" content="lazygocd is a fast, keyboard-driven terminal UI for GoCD CI/CD servers, written in Rust. Browse pipelines, trigger runs, tail console logs, and check deployed commits without leaving your terminal.">
+<title>lazygocd — a GoCD terminal UI (TUI) for pipelines</title>
+<meta name="description" content="lazygocd is a fast, keyboard-driven terminal UI for GoCD. Browse pipeline groups, trigger and rerun builds, tail console logs, and check deployed commits from the command line. Open source, written in Rust, macOS and Linux.">
 <meta name="theme-color" content="#0a0f14">
 <link rel="canonical" href="https://lazygocd.vercel.app/">
-<meta property="og:title" content="lazygocd — a fast terminal UI for GoCD">
-<meta property="og:description" content="lazygocd is a fast, keyboard-driven terminal UI for GoCD CI/CD servers, written in Rust.">
+<meta property="og:title" content="lazygocd — a GoCD terminal UI (TUI) for pipelines">
+<meta property="og:description" content="lazygocd is a fast, keyboard-driven terminal UI for GoCD. Browse pipeline groups, trigger and rerun builds, tail console logs, and check deployed commits from the command line. Open source, written in Rust, macOS and Linux.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://lazygocd.vercel.app/">
 <meta property="og:site_name" content="lazygocd">
 <meta property="og:image" content="https://lazygocd.vercel.app/demo-poster.png">
+<meta property="og:image:width" content="1380">
+<meta property="og:image:height" content="780">
+<meta property="og:locale" content="en_US">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="lazygocd — a fast terminal UI for GoCD">
-<meta name="twitter:description" content="Browse pipelines, trigger runs, tail console logs, and check deployed commits without leaving your terminal.">
+<meta name="twitter:title" content="lazygocd — a GoCD terminal UI (TUI) for pipelines">
+<meta name="twitter:description" content="lazygocd is a fast, keyboard-driven terminal UI for GoCD. Browse pipeline groups, trigger and rerun builds, tail console logs, and check deployed commits from the command line. Open source, written in Rust, macOS and Linux.">
 <meta name="twitter:image" content="https://lazygocd.vercel.app/demo-poster.png">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='2' y='2' width='60' height='60' rx='14' fill='%230b1117' stroke='%233fd5e6' stroke-width='4'/%3E%3Cpath d='M17 23l11 9-11 9' fill='none' stroke='%233fd5e6' stroke-width='6' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M33 41h13' stroke='%233fd5e6' stroke-width='6' stroke-linecap='round'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/style.css">
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "lazygocd",
+  "alternateName": [
+    "GoCD TUI",
+    "GoCD terminal UI"
+  ],
+  "description": "A fast, keyboard-driven terminal UI (TUI) for GoCD. Browse pipeline groups and run history, trigger, pause, cancel and rerun pipelines, tail and search live console logs, and check whether a deployed commit is behind its branch, all without leaving the terminal.",
+  "applicationCategory": "DeveloperApplication",
+  "applicationSubCategory": "Continuous Integration",
+  "operatingSystem": "macOS, Linux",
+  "softwareVersion": "0.5.0",
+  "url": "https://lazygocd.vercel.app",
+  "downloadUrl": "https://github.com/Sahilll15/lazygocd/releases",
+  "installUrl": "https://lazygocd.vercel.app/install",
+  "codeRepository": "https://github.com/Sahilll15/lazygocd",
+  "programmingLanguage": "Rust",
+  "license": "https://opensource.org/licenses/MIT",
+  "isAccessibleForFree": true,
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "USD"
+  },
+  "author": {
+    "@type": "Person",
+    "name": "Sahil Chalke",
+    "url": "https://github.com/Sahilll15"
+  },
+  "keywords": "GoCD, TUI, terminal UI, CLI, continuous integration, continuous delivery, pipelines, Rust, ratatui, devops",
+  "screenshot": "https://lazygocd.vercel.app/demo-poster.png"
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Is there a terminal UI for GoCD?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes. lazygocd is an open-source terminal UI (TUI) for GoCD, written in Rust. It shows pipeline groups, run history, stages and live console logs on one keyboard-driven screen, and can trigger, pause, cancel and rerun pipelines without a browser."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Is lazygocd like lazygit but for GoCD?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "That is the idea it is built on. lazygocd applies the lazygit model, a fast keyboard-driven terminal interface over an existing tool, to GoCD pipelines instead of git repositories."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "How do I use GoCD from the command line?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Install lazygocd with 'brew install Sahilll15/tap/lazygocd' or 'cargo install lazygocd', run 'lazygocd', and enter your GoCD server URL with an access token or username and password. Nothing needs installing on the GoCD server itself, since it talks to the standard GoCD REST API."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Does lazygocd require a GoCD plugin or server-side setup?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "No. It is a single binary that uses the GoCD REST API with your own credentials, so it needs no plugin, no agent, and no administrator access to the GoCD server."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Does it work with thousands of pipelines?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes. It loads the whole dashboard in a single API call rather than polling per pipeline, caches it to disk for instant startup, revalidates with ETags so unchanged polls cost nothing, and offers fuzzy filtering to find one pipeline among thousands. It is used against an instance with roughly 2,400 pipelines."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Is lazygocd free and open source?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes, it is MIT licensed. The source is on GitHub and the crate is published on crates.io."
+      }
+    }
+  ]
+}
+</script>
 </head>
 <body>
 
@@ -215,6 +310,43 @@
         <div class="stat"><div class="num">0 network calls</div><div class="lbl">to first paint, via the disk cache</div></div>
         <div class="stat"><div class="num">40&nbsp;ms</div><div class="lbl">input poll, so keys land instantly</div></div>
       </div>
+    </div>
+  </section>
+
+  <!-- ================= faq ================= -->
+  <section>
+    <div class="wrap">
+      <h2>Questions people ask</h2>
+
+      <article class="trouble t-cyan">
+        <div class="symptom">Is there a terminal UI for GoCD?</div>
+        <div class="fix"><p>Yes. lazygocd is an open-source terminal UI (TUI) for GoCD, written in Rust. It shows pipeline groups, run history, stages and live console logs on one keyboard-driven screen, and can trigger, pause, cancel and rerun pipelines without a browser.</p></div>
+      </article>
+
+      <article class="trouble t-cyan">
+        <div class="symptom">Is lazygocd like lazygit but for GoCD?</div>
+        <div class="fix"><p>That is the idea it is built on. lazygocd applies the <a href="https://github.com/jesseduffield/lazygit">lazygit</a> model, a fast keyboard-driven terminal interface over an existing tool, to GoCD pipelines instead of git repositories.</p></div>
+      </article>
+
+      <article class="trouble t-cyan">
+        <div class="symptom">How do I use GoCD from the command line?</div>
+        <div class="fix"><p>Install it with <code>brew install Sahilll15/tap/lazygocd</code> or <code>cargo install lazygocd</code>, run <code>lazygocd</code>, and enter your GoCD server URL with an access token or username and password. See the <a href="/quickstart">quickstart</a>.</p></div>
+      </article>
+
+      <article class="trouble t-cyan">
+        <div class="symptom">Does lazygocd require a GoCD plugin or server-side setup?</div>
+        <div class="fix"><p>No. It is a single binary that uses the GoCD REST API with your own credentials, so it needs no plugin, no agent, and no administrator access to the GoCD server.</p></div>
+      </article>
+
+      <article class="trouble t-cyan">
+        <div class="symptom">Does it work with thousands of pipelines?</div>
+        <div class="fix"><p>Yes. It loads the whole dashboard in a single API call rather than polling per pipeline, caches it to disk for instant startup, revalidates with ETags so unchanged polls cost nothing, and offers fuzzy filtering to find one pipeline among thousands. It is used daily against an instance with roughly 2,400 pipelines.</p></div>
+      </article>
+
+      <article class="trouble t-cyan">
+        <div class="symptom">Is lazygocd free and open source?</div>
+        <div class="fix"><p>Yes, MIT licensed. The source is on <a href="https://github.com/Sahilll15/lazygocd">GitHub</a> and the crate is published on <a href="https://crates.io/crates/lazygocd">crates.io</a>.</p></div>
+      </article>
     </div>
   </section>
 
