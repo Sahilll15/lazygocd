@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.6.1 - 2026-08-22
+
+Demo mode was not as isolated as v0.6.0 claimed.
+
+- `--demo` read the real favorites file, so actual pipeline names appeared in
+  a mode intended for screenshots and screen sharing. It now seeds fictional
+  favorites and never reads that file.
+- `--demo` could also write to the real config directory. Pressing `f` would
+  overwrite favorites.json with demo names, a dashboard refresh would overwrite
+  the cache, and completing the `A` or `@` forms would rewrite config.toml. All
+  four writes are now suppressed in demo mode.
+- Regression test asserts every demo favorite is one of the fixture pipelines,
+  so a real name reappearing fails the build.
+
 ## v0.6.0 - 2026-08-22
 
 - `--demo` launches the interface with fictional pipelines: no server, no
