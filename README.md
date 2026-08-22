@@ -19,6 +19,16 @@ Browse every pipeline group, drill into run history and stage/job details, tail 
 
 ![lazygocd demo](assets/demo.gif)
 
+### Try it without a GoCD server
+
+```sh
+lazygocd --demo
+```
+
+Launches the full interface against fictional pipelines. No server, no
+credentials, no config file written. Every key works, and the mutating ones
+are no-ops.
+
 ## Why
 
 GoCD's web dashboard gets slow and clicky on large installations. lazygocd loads an entire 2,000+ pipeline instance in one request, caches it locally so the next launch is instant, and puts every common action one keystroke away.

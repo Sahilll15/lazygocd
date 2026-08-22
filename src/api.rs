@@ -14,6 +14,8 @@ pub struct GoCdClient {
     username: Option<String>,
     password: Option<String>,
     token: Option<String>,
+    /// `--demo`: serve canned fixtures and never touch the network.
+    demo: bool,
 }
 
 impl GoCdClient {
@@ -34,7 +36,20 @@ impl GoCdClient {
             base_url: cfg.server_url.trim_end_matches('/').to_string(),
             username: cfg.username.clone(),
             password: cfg.password.clone(),
+            demo: false,
             token: cfg.auth_token.clone(),
+        })
+    }
+
+    /// Demo client: no credentials, no requests, fixtures only.
+    pub fn demo() -> Result<Self> {
+        Ok(GoCdClient {
+            client: Client::builder().build().context("building demo HTTP client")?,
+            base_url: "demo".to_string(),
+            username: None,
+            password: None,
+            token: None,
+            demo: true,
         })
     }
 
@@ -75,6 +90,11 @@ impl GoCdClient {
         etag: Option<&str>,
         view: Option<&str>,
     ) -> Result<Option<(DashboardEmbedded, Option<String>)>> {
+        if self.demo {
+            let parsed: DashboardResponse = serde_json::from_str(&crate::demo::dashboard_json(view))
+                .context("parsing demo dashboard")?;
+            return Ok(Some((parsed.embedded, Some("demo-etag".to_string()))));
+        }
         let mut rb = self.request(Method::GET, "/api/dashboard", 4);
         if let Some(name) = view {
             // The server filters to the personalized view, same as the web UI's tabs.
@@ -110,6 +130,17 @@ impl GoCdClient {
         pipeline_name: &str,
         after: Option<u64>,
     ) -> Result<(Vec<PipelineInstance>, Option<u64>)> {
+        if self.demo {
+            let parsed: HistoryResponse =
+                serde_json::from_str(&crate::demo::history_json(pipeline_name, after))
+                    .context("parsing demo history")?;
+            let next = parsed
+                .links
+                .and_then(|l| l.next)
+                .and_then(|n| crate::model::next_page_cursor(&n.href));
+            return Ok((parsed.pipelines, next));
+        }
+
         let mut path = format!("/api/pipelines/{pipeline_name}/history");
         if let Some(cursor) = after {
             path.push_str(&format!("?after={cursor}"));
@@ -140,6 +171,10 @@ impl GoCdClient {
     }
 
     pub fn trigger_pipeline(&self, pipeline_name: &str) -> Result<()> {
+        if self.demo {
+            return Ok(());
+        }
+
         let path = format!("/api/pipelines/{pipeline_name}/schedule");
         let resp = self
             .request(Method::POST, &path, 1)
@@ -165,6 +200,10 @@ impl GoCdClient {
         pipeline_name: &str,
         vars: &[(String, String)],
     ) -> Result<()> {
+        if self.demo {
+            return Ok(());
+        }
+
         let env: Vec<serde_json::Value> = vars
             .iter()
             .map(|(name, value)| serde_json::json!({ "name": name, "value": value, "secure": false }))
@@ -198,6 +237,10 @@ impl GoCdClient {
         stage_name: &str,
         stage_counter: &str,
     ) -> Result<()> {
+        if self.demo {
+            return Ok(());
+        }
+
         self.rerun(
             pipeline_name,
             pipeline_counter,
@@ -215,6 +258,10 @@ impl GoCdClient {
         stage_name: &str,
         stage_counter: &str,
     ) -> Result<()> {
+        if self.demo {
+            return Ok(());
+        }
+
         self.rerun(
             pipeline_name,
             pipeline_counter,
@@ -252,6 +299,10 @@ impl GoCdClient {
     }
 
     pub fn pause_pipeline(&self, pipeline_name: &str, cause: &str) -> Result<()> {
+        if self.demo {
+            return Ok(());
+        }
+
         let path = format!("/api/pipelines/{pipeline_name}/pause");
         let resp = self
             .request(Method::POST, &path, 1)
@@ -271,6 +322,10 @@ impl GoCdClient {
     }
 
     pub fn unpause_pipeline(&self, pipeline_name: &str) -> Result<()> {
+        if self.demo {
+            return Ok(());
+        }
+
         let path = format!("/api/pipelines/{pipeline_name}/unpause");
         let resp = self
             .request(Method::POST, &path, 1)
@@ -297,6 +352,10 @@ impl GoCdClient {
         stage_name: &str,
         stage_counter: &str,
     ) -> Result<()> {
+        if self.demo {
+            return Ok(());
+        }
+
         let path = format!(
             "/api/stages/{pipeline_name}/{pipeline_counter}/{stage_name}/{stage_counter}/cancel"
         );
@@ -324,6 +383,12 @@ impl GoCdClient {
     /// Internal (unversioned-contract) endpoint, but stable in practice - the
     /// web dashboard itself uses it.
     pub fn fetch_views(&self) -> Result<(ViewFilters, Option<String>)> {
+        if self.demo {
+            let f: ViewFilters = serde_json::from_str(crate::demo::views_json())
+                .context("parsing demo views")?;
+            return Ok((f, Some("demo-etag".to_string())));
+        }
+
         let resp = self
             .request(Method::GET, "/api/internal/pipeline_selection", 1)
             .send()
@@ -349,6 +414,10 @@ impl GoCdClient {
     /// Create or update a personalized view: fetch-fresh, upsert, PUT back with
     /// If-Match so a concurrent web-UI edit fails loudly instead of being lost.
     pub fn save_view(&self, name: &str, pipelines: Vec<String>) -> Result<()> {
+        if self.demo {
+            return Ok(());
+        }
+
         let (mut current, etag) = self.fetch_views()?;
         let new_filter = crate::model::ViewFilter {
             name: name.to_string(),
@@ -385,6 +454,11 @@ impl GoCdClient {
         stage_counter: &str,
         job_name: &str,
     ) -> Result<Vec<ArtifactNode>> {
+        if self.demo {
+            return serde_json::from_str(crate::demo::artifacts_json())
+                .context("parsing demo artifacts");
+        }
+
         let path = format!(
             "/files/{pipeline_name}/{pipeline_counter}/{stage_name}/{stage_counter}/{job_name}.json"
         );
@@ -414,6 +488,10 @@ impl GoCdClient {
         job_name: &str,
         start_line: usize,
     ) -> Result<String> {
+        if self.demo {
+            return Ok(crate::demo::console_log(start_line));
+        }
+
         let mut path = format!(
             "/files/{pipeline_name}/{pipeline_counter}/{stage_name}/{stage_counter}/{job_name}/cruise-output/console.log"
         );

@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- `--demo` launches the interface with fictional pipelines: no server, no
+  credentials, and nothing written to disk. Fixtures are parsed by the same
+  serde models the live API path uses, so the demo cannot drift silently out
+  of sync with real response shapes.
+
 ## v0.5.0 - 2026-08-22
 
 Interface pass. The tool had grown from six keybindings to fourteen without
