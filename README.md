@@ -46,6 +46,12 @@ brew install Sahilll15/tap/lazygocd
 ### Cargo
 
 ```sh
+cargo install lazygocd
+```
+
+Or track the latest commit rather than the last release:
+
+```sh
 cargo install --git https://github.com/Sahilll15/lazygocd
 ```
 
