@@ -379,6 +379,39 @@ impl GoCdClient {
         Ok(())
     }
 
+    /// A single pipeline run by counter. Used to trace a deploy run's commit
+    /// through its upstream pipeline dependency.
+    pub fn fetch_pipeline_instance(&self, name: &str, counter: i64) -> Result<PipelineInstance> {
+        if self.demo {
+            let hist: HistoryResponse = serde_json::from_str(&crate::demo::history_json(name, None))
+                .context("parsing demo instance")?;
+            return hist
+                .pipelines
+                .into_iter()
+                .find(|p| p.counter == counter)
+                .or_else(|| {
+                    serde_json::from_str::<HistoryResponse>(&crate::demo::history_json(name, None))
+                        .ok()?
+                        .pipelines
+                        .into_iter()
+                        .next()
+                })
+                .context("no demo instance");
+        }
+        let path = format!("/api/pipelines/{name}/{counter}");
+        let resp = self
+            .request(Method::GET, &path, 1)
+            .send()
+            .with_context(|| format!("requesting {name} run {counter}"))?;
+        let status = resp.status();
+        let body = resp.text().context("reading instance body")?;
+        if !status.is_success() {
+            anyhow::bail!("GoCD returned {status} for {name}/{counter}: {}", truncate(&body));
+        }
+        serde_json::from_str(&body)
+            .with_context(|| format!("parsing {name}/{counter}: {}", truncate(&body)))
+    }
+
     /// The user's personalized dashboard views plus the optimistic-lock ETag.
     /// Internal (unversioned-contract) endpoint, but stable in practice - the
     /// web dashboard itself uses it.

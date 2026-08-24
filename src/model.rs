@@ -227,6 +227,9 @@ pub struct GitRef {
     pub repo: String,
     pub branch: String,
     pub deployed_sha: String,
+    /// Set when the commit was traced through an upstream pipeline dependency
+    /// rather than read from this run's own Git material: (pipeline, counter).
+    pub via: Option<(String, i64)>,
 }
 
 impl GitRef {
@@ -260,6 +263,7 @@ impl PipelineInstance {
                 let branch = parse_branch(desc).unwrap_or_else(|| "main".to_string());
                 let deployed_sha = mr.modifications.first()?.revision.clone()?;
                 Some(GitRef {
+                    via: None,
                     host,
                     owner,
                     repo,
@@ -278,6 +282,28 @@ impl PipelineInstance {
     pub fn git_modification(&self) -> Option<&Modification> {
         self.first_git_revision()?.modifications.first()
     }
+}
+
+/// Upstream pipeline dependencies this run was triggered by, as
+/// (pipeline, counter). A deploy pipeline usually has no Git material at all:
+/// its only input is a Pipeline material whose revision reads
+/// "upstream-name/389/stage-name/1", so the commit lives one hop away.
+pub fn upstream_deps(inst: &PipelineInstance) -> Vec<(String, i64)> {
+    let Some(cause) = &inst.build_cause else {
+        return Vec::new();
+    };
+    cause
+        .material_revisions
+        .iter()
+        .filter(|mr| mr.material.kind.as_deref() == Some("Pipeline"))
+        .filter_map(|mr| {
+            let rev = mr.modifications.first()?.revision.as_deref()?;
+            let mut parts = rev.split('/');
+            let name = parts.next()?.to_string();
+            let counter: i64 = parts.next()?.parse().ok()?;
+            (!name.is_empty()).then_some((name, counter))
+        })
+        .collect()
 }
 
 /// GoCD's Git material description reads like:

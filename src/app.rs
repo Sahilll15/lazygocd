@@ -271,6 +271,9 @@ pub enum ApiEvent {
     ConsoleLog(JobRef, usize, Result<String, String>),
     Artifacts(JobRef, Result<Vec<ArtifactNode>, String>),
     Views(u64, Result<Vec<ViewFilter>, String>),
+    /// Git refs traced through upstream pipeline dependencies (deploy pipelines
+    /// have no Git material of their own).
+    UpstreamRefs(String, Vec<GitRef>),
     ViewSaved(u64, Result<String, String>),
 }
 
@@ -663,7 +666,19 @@ impl App {
             .unwrap_or_default();
         if refs.is_empty() {
             self.github_checks.clear();
-            self.github_state = GithubState::Idle;
+            // A deploy pipeline's only material is usually an upstream
+            // dependency, so the commit is one or more hops away.
+            let deps = self
+                .history
+                .first()
+                .map(crate::model::upstream_deps)
+                .unwrap_or_default();
+            if deps.is_empty() {
+                self.github_state = GithubState::Idle;
+            } else {
+                self.github_state = GithubState::Checking;
+                self.spawn_trace_upstream(pipeline, deps);
+            }
             return;
         }
         self.github_checks = refs
@@ -673,6 +688,46 @@ impl App {
             .collect();
         self.github_state = GithubState::Checking;
         self.spawn_check_github(pipeline, &refs);
+    }
+
+    /// Walks upstream pipeline dependencies until a run with Git materials is
+    /// found. Depth-capped: a chain can be long, and each hop is one request.
+    fn spawn_trace_upstream(&self, pipeline: String, deps: Vec<(String, i64)>) {
+        const MAX_HOPS: usize = 4;
+        let client = self.client.clone();
+        let tx = self.tx.clone();
+        thread::spawn(move || {
+            let mut queue = deps;
+            let mut seen: Vec<(String, i64)> = Vec::new();
+            let mut found: Vec<GitRef> = Vec::new();
+
+            for _ in 0..MAX_HOPS {
+                let Some((name, counter)) = queue.pop() else {
+                    break;
+                };
+                if seen.contains(&(name.clone(), counter)) {
+                    continue;
+                }
+                seen.push((name.clone(), counter));
+
+                let Ok(inst) = client.fetch_pipeline_instance(&name, counter) else {
+                    continue;
+                };
+                let refs = inst.git_refs();
+                if !refs.is_empty() {
+                    found = refs
+                        .into_iter()
+                        .map(|mut r| {
+                            r.via = Some((name.clone(), counter));
+                            r
+                        })
+                        .collect();
+                    break;
+                }
+                queue.extend(crate::model::upstream_deps(&inst));
+            }
+            let _ = tx.send(ApiEvent::UpstreamRefs(pipeline, found));
+        });
     }
 
     fn spawn_console_fetch(&self, job_ref: JobRef) {
@@ -766,6 +821,18 @@ impl App {
                             self.spawn_load_views();
                         }
                         Err(e) => self.error_line = Some(format!("Saving view failed: {e}")),
+                    }
+                }
+            }
+            ApiEvent::UpstreamRefs(pipeline, refs) => {
+                // Guard on the still-open pipeline: tracing is several requests deep.
+                if self.selected_pipeline.as_deref() == Some(pipeline.as_str()) {
+                    if refs.is_empty() {
+                        self.github_state = GithubState::Idle;
+                    } else {
+                        self.github_checks =
+                            refs.iter().cloned().map(|r| (r, GithubState::Checking)).collect();
+                        self.spawn_check_github(pipeline, &refs);
                     }
                 }
             }

@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.7.0 - 2026-08-22
+
+- The GitHub deployed-commit check now works on deploy pipelines. A deploy run
+  usually has no Git material of its own: its only input is a Pipeline material
+  whose revision reads `upstream-name/389/stage/1`, so the commit lives one hop
+  away. The check now walks that dependency chain (depth-capped at four hops,
+  cycle-guarded) and reports the commit it finds, labelled `via <pipeline>
+  #<counter>` so it is clear the commit was inherited rather than direct.
+
 ## v0.6.1 - 2026-08-22
 
 Demo mode was not as isolated as v0.6.0 claimed.

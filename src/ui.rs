@@ -704,6 +704,14 @@ fn draw_detail(f: &mut Frame, app: &App, area: Rect) {
                 Span::raw("  "),
                 status_span,
             ]));
+            // Say so when the commit was traced upstream, otherwise it reads as
+            // if this deploy run had a Git material of its own.
+            if let Some((up_name, up_counter)) = &git_ref.via {
+                lines.push(Line::from(Span::styled(
+                    format!("        via {up_name} #{up_counter}"),
+                    Style::default().fg(theme::MUTED),
+                )));
+            }
         }
     }
 
