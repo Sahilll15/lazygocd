@@ -111,7 +111,7 @@
         <div class="symptom"><span class="bang">&#9888; </span>can't check &nbsp;<span class="c-muted">(GitHub commit comparison, private repo)</span></div>
         <div class="fix">
           <p>The deployed-commit check works unauthenticated for public repos (rate-limited), but a private repo needs credentials. Press <kbd>@</kbd> and paste a GitHub personal access token with read access to the repo, or export <code>GITHUB_TOKEN</code> before launching. Until then it shows this soft hint rather than an error.</p>
-          <p class="small">No comparison shown at all? That's expected when the pipeline's latest run has no direct Git material, for example when it's triggered by an upstream pipeline.</p>
+          <p class="small">No comparison shown at all? Since v0.7.0 a deploy pipeline triggered by an upstream build is traced through its pipeline dependency, and the commit is shown with a <code>via &lt;pipeline&gt; #&lt;counter&gt;</code> line. If nothing appears, the run has neither a Git material nor a pipeline dependency leading to one within four hops.</p>
         </div>
       </article>
 
