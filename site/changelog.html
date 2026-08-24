@@ -85,6 +85,21 @@
           <article class="release-item">
             <div class="release-meta">
               <span class="release-dot" aria-hidden="true"></span>
+              <span class="release-tag">v0.7.0</span>
+              <time datetime="2026-08-22">2026-08-22</time>
+            </div>
+            <div class="release-body">
+              <h2>Deployed-commit check on deploy pipelines</h2>
+              <ul>
+                <li>The check previously appeared only on build pipelines. A build run carries a Git material with a real commit, but a deploy run's only material is a <code>Pipeline</code> dependency whose revision reads <code>upstream-name/389/stage/1</code>, so there was no commit in its build cause to compare.</li>
+                <li>lazygocd now walks that dependency chain when a run has no Git material of its own, up to four hops with a cycle guard, and labels the result <code>via &lt;pipeline&gt; #&lt;counter&gt;</code> so an inherited commit is never mistaken for a direct one.</li>
+              </ul>
+            </div>
+          </article>
+
+          <article class="release-item">
+            <div class="release-meta">
+              <span class="release-dot" aria-hidden="true"></span>
               <span class="release-tag">v0.6.1</span>
               <time datetime="2026-08-22">2026-08-22</time>
             </div>
