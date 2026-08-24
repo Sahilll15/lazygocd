@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.8.1 - 2026-08-22
+
+- Fixed `e` with GUI editors. VS Code and Zed return as soon as the window has
+  the file (about four seconds for a cold VS Code launch), so deleting the temp
+  file when the command exited pulled it out from under the open tab. The file
+  is now left in place and stale ones are swept at startup instead.
+
 ## v0.8.0 - 2026-08-22
 
 - `e` opens the current log in your own editor. lazygocd writes the buffer to a

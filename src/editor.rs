@@ -5,7 +5,8 @@
 //! and opens it in `$VISUAL` / `$EDITOR`.
 
 use anyhow::{Context, Result};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
+use std::time::{Duration, SystemTime};
 use std::process::Command;
 
 /// What the UI asks the main loop to open. Built in the app, performed by the
@@ -81,9 +82,33 @@ pub fn edit(req: &EditRequest) -> Result<()> {
     Ok(())
 }
 
-/// Best-effort cleanup; a leftover temp file is harmless but untidy.
-pub fn discard(path: &Path) {
-    let _ = std::fs::remove_file(path);
+/// Sweeps lazygocd temp files left from previous runs.
+///
+/// Deleting right after the editor exits is wrong for GUI editors: `code` and
+/// `zed` return as soon as the window is handed the file (measured at ~4s for a
+/// cold VS Code launch, instantly when already running), so removing the file
+/// then yanks it out from under the open tab. Instead the file is left alone and
+/// stale ones are swept on the next start.
+pub fn cleanup_stale(max_age: Duration) {
+    let Ok(entries) = std::fs::read_dir(std::env::temp_dir()) else {
+        return;
+    };
+    let now = SystemTime::now();
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let Some(name) = name.to_str() else { continue };
+        if !name.starts_with("lazygocd-") {
+            continue;
+        }
+        let stale = entry
+            .metadata()
+            .and_then(|m| m.modified())
+            .map(|t| now.duration_since(t).unwrap_or_default() > max_age)
+            .unwrap_or(false);
+        if stale {
+            let _ = std::fs::remove_file(entry.path());
+        }
+    }
 }
 
 #[cfg(test)]

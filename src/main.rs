@@ -88,6 +88,9 @@ fn main() -> anyhow::Result<()> {
         App::new(&cfg)?
     };
 
+    // Remove temp logs from previous sessions (a day old or more).
+    editor::cleanup_stale(std::time::Duration::from_secs(24 * 60 * 60));
+
     let mut terminal = ratatui::init();
     let _ = crossterm::execute!(std::io::stdout(), EnableMouseCapture);
     // ratatui's panic hook restores the screen but not mouse capture; chain ours
@@ -135,10 +138,12 @@ fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> anyhow::Result
             dirty = true;
 
             match outcome {
+                // The file is deliberately left in place: a GUI editor returns
+                // as soon as its window opens, so deleting now would pull the
+                // file out from under the tab. Swept on the next start instead.
                 Ok(()) => {
-                    let path = editor::temp_path(&req.file_name);
-                    app.status_line = format!("Closed {}", path.display());
-                    editor::discard(&path);
+                    app.status_line =
+                        format!("Opened in editor: {}", editor::temp_path(&req.file_name).display());
                 }
                 Err(e) => app.error_line = Some(format!("{e:#}")),
             }

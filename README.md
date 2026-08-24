@@ -116,6 +116,14 @@ Env vars override the config for scripting: `GOCD_URL`, `GOCD_USERNAME`, `GOCD_P
 | `V` | save the current filter matches as a new GoCD view |
 | `y` | copy: commit SHA (history/details), pipeline/group name (tree), artifact URL (job view) |
 | `e` | open the current log in `$VISUAL` / `$EDITOR` (vim, nvim, code, zed) |
+
+Set your editor once in `~/.zshrc`:
+
+```sh
+export EDITOR=nvim              # inline, takes over the terminal
+export EDITOR="code --wait"     # VS Code; --wait returns you to the TUI on close
+export EDITOR=code              # VS Code, returns to the TUI immediately
+```
 | `X` | cancel the currently running stage (confirm) |
 | `R` | rerun the failed jobs of the selected run's failed stage (`a` in the confirm reruns the whole stage) |
 | `o` | open the selected run's commit on GitHub (or the pending diff when the deploy is behind) |
