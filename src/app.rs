@@ -1448,6 +1448,7 @@ impl App {
                     self.status_line = "Nothing to open yet".to_string();
                 } else {
                     self.pending_edit = Some(crate::editor::EditRequest {
+                        configured: self.cfg.editor.clone(),
                         file_name: format!(
                             "{}-{}-{}-{}-{suffix}",
                             j.pipeline, j.pipeline_counter, j.stage, j.job

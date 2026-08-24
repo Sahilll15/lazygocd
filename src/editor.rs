@@ -16,12 +16,24 @@ pub struct EditRequest {
     /// Basename only; the extension drives the editor's syntax highlighting.
     pub file_name: String,
     pub contents: String,
+    /// From config.toml's `editor`, when set.
+    pub configured: Option<String>,
 }
 
 /// `$VISUAL` wins over `$EDITOR` by long-standing convention (VISUAL is the
 /// full-screen one). Falls back to a pager, then vi, so this works on a box
 /// with nothing configured.
-pub fn resolve_editor() -> (String, Vec<String>) {
+pub fn resolve_editor(configured: Option<&str>) -> (String, Vec<String>) {
+    // config.toml wins: it is the setting a user of this tool set deliberately.
+    if let Some(raw) = configured {
+        let raw = raw.trim();
+        if !raw.is_empty() {
+            let mut parts = raw.split_whitespace().map(str::to_string);
+            if let Some(prog) = parts.next() {
+                return (prog, parts.collect());
+            }
+        }
+    }
     for var in ["VISUAL", "EDITOR"] {
         if let Ok(raw) = std::env::var(var) {
             let raw = raw.trim();
@@ -70,12 +82,14 @@ pub fn edit(req: &EditRequest) -> Result<()> {
     let path = temp_path(&req.file_name);
     std::fs::write(&path, &req.contents)
         .with_context(|| format!("writing {}", path.display()))?;
-    let (program, args) = resolve_editor();
+    let (program, args) = resolve_editor(req.configured.as_deref());
     let status = Command::new(&program)
         .args(&args)
         .arg(&path)
         .status()
-        .with_context(|| format!("launching editor {program:?} (set $EDITOR to change it)"))?;
+        .with_context(|| {
+            format!("launching editor {program:?} (set `editor` in config.toml or $EDITOR)")
+        })?;
     if !status.success() {
         anyhow::bail!("{program} exited with {status}");
     }
@@ -113,6 +127,23 @@ pub fn cleanup_stale(max_age: Duration) {
 
 #[cfg(test)]
 mod tests {
+    // config.toml must win over the environment, otherwise setting it does
+    // nothing on a machine that already exports EDITOR.
+    #[test]
+    fn configured_editor_beats_the_environment() {
+        let (prog, args) = super::resolve_editor(Some("code --wait"));
+        assert_eq!(prog, "code");
+        assert_eq!(args, vec!["--wait"]);
+    }
+
+    #[test]
+    fn blank_config_falls_through_to_the_environment_or_default() {
+        // An empty or whitespace value must not shadow $EDITOR.
+        let (prog, _) = super::resolve_editor(Some("   "));
+        assert!(!prog.is_empty());
+        assert_ne!(prog, "   ");
+    }
+
     #[test]
     fn visual_beats_editor_and_flags_are_split() {
         // Not asserting against the real env: just the parsing contract that a

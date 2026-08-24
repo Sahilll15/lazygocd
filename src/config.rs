@@ -31,6 +31,10 @@ pub struct Config {
     /// Desktop notification when a favorited pipeline's latest run turns Failed.
     #[serde(default = "default_true")]
     pub notifications: bool,
+    /// Editor for 'e', e.g. "nvim" or "code --wait". Takes precedence over
+    /// $VISUAL and $EDITOR so the tool works on a shell that sets neither.
+    #[serde(default)]
+    pub editor: Option<String>,
 }
 
 fn default_poll_interval() -> u64 {
@@ -57,6 +61,7 @@ impl Default for Config {
             github_token: None,
             github_api_base: default_github_api_base(),
             notifications: true,
+            editor: None,
         }
     }
 }

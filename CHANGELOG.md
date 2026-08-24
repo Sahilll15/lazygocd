@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.9.0 - 2026-08-22
+
+- `editor` setting in config.toml, so `e` no longer depends on the shell. Many
+  machines set neither `$VISUAL` nor `$EDITOR`, and lazygocd would silently fall
+  back to the `less` pager. Precedence is now config, then `$VISUAL`, then
+  `$EDITOR`, then `less` or `vi`. A blank value falls through rather than
+  shadowing the environment.
+
+  ```toml
+  editor = "code --wait"   # or "nvim", "zed --wait", "subl --wait"
+  ```
+
 ## v0.8.1 - 2026-08-22
 
 - Fixed `e` with GUI editors. VS Code and Zed return as soon as the window has

@@ -119,6 +119,15 @@ Env vars override the config for scripting: `GOCD_URL`, `GOCD_USERNAME`, `GOCD_P
 
 Set your editor once in `~/.zshrc`:
 
+Set it in `~/.config/lazygocd/config.toml`, which takes precedence over the
+shell and works on a machine that sets neither `$VISUAL` nor `$EDITOR`:
+
+```toml
+editor = "code --wait"   # or "nvim", "zed --wait", "subl --wait"
+```
+
+Or via the environment, if you prefer:
+
 ```sh
 export EDITOR=nvim              # inline, takes over the terminal
 export EDITOR="code --wait"     # VS Code; --wait returns you to the TUI on close
