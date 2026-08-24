@@ -1110,14 +1110,15 @@ fn draw_console_log(f: &mut Frame, area: Rect, state: &ConsoleLogState, tick: u6
     }
     f.render_widget(Paragraph::new(Line::from(status_spans)), status_area);
 
+    // 'e' was reachable only from the help modal, so nobody would find it.
     let hint = match state.tab {
         JobTab::Console => {
-            "tab/1-3 switch   / search   n/N match   j/k scroll   g/G top/bottom   r refresh   q/esc close"
+            "tab/1-3 switch   / search   n/N match   j/k scroll   e editor   r refresh   q/esc close"
         }
         JobTab::Artifacts => {
-            "tab/1-3 switch   j/k select   enter/o open in browser   r refresh   q/esc close"
+            "tab/1-3 switch   j/k select   enter/o open in browser   y copy url   q/esc close"
         }
-        JobTab::Materials => "tab/1-3 switch   j/k scroll   q/esc close",
+        JobTab::Materials => "tab/1-3 switch   j/k scroll   e editor   q/esc close",
     };
     f.render_widget(
         Paragraph::new(Line::from(Span::styled(
