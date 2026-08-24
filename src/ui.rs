@@ -1632,4 +1632,58 @@ mod tests {
         assert!(find_matches_ci("abc", "").is_empty());
         assert!(find_matches_ci("abc", "zz").is_empty());
     }
+
+    // The URL used to eat 45 columns of the header.
+    #[test]
+    fn short_host_keeps_only_the_host() {
+        assert_eq!(super::short_host("https://gocd.example.com/go"), "gocd.example.com");
+        assert_eq!(super::short_host("http://10.0.0.4:8153/go/"), "10.0.0.4:8153");
+        assert_eq!(super::short_host("gocd.example.com/go"), "gocd.example.com");
+        assert_eq!(super::short_host("demo"), "demo");
+    }
+
+    #[test]
+    fn short_sha_is_character_safe() {
+        assert_eq!(super::short_sha("25d63f5a166e44e1b86d"), "25d63f5");
+        assert_eq!(super::short_sha("abc"), "abc");
+        assert_eq!(super::short_sha(""), "");
+        // Never panics on non-ASCII, which byte slicing would.
+        assert_eq!(super::short_sha("\u{e9}\u{e9}\u{e9}\u{e9}\u{e9}\u{e9}\u{e9}\u{e9}").chars().count(), 7);
+    }
+
+    // The whole point of the colouring is that a failure is obvious, so a
+    // regression that dropped ERROR into the default style would be silent.
+    #[test]
+    fn console_severity_classification() {
+        let danger = super::console_body_style("", "ERROR failed to publish artifact");
+        let warn = super::console_body_style("", "WARN deprecated flag");
+        let pass = super::console_body_style("", "All 214 tests passed.");
+        let plain = super::console_body_style("", "compiling module 3");
+        assert_ne!(danger, plain, "errors must not render as plain text");
+        assert_ne!(warn, plain, "warnings must not render as plain text");
+        assert_ne!(pass, plain, "passes must not render as plain text");
+        assert_ne!(danger, warn);
+        assert_ne!(danger, pass);
+
+        // GoCD's own stream markers carry severity even without keywords.
+        assert_eq!(super::console_body_style("!!", "anything"), danger);
+        assert_eq!(super::console_body_style("&2", "anything"), warn);
+
+        // Case-insensitive: real logs are inconsistent.
+        assert_eq!(super::console_body_style("", "error: boom"), danger);
+        assert_eq!(super::console_body_style("", "Exception in thread"), danger);
+    }
+
+    #[test]
+    fn status_glyph_and_colour_agree_on_each_state() {
+        // Building and Cancelled must be visually distinct from done states,
+        // since the dashboard counts lean on them.
+        assert_ne!(super::dot_for("Building"), super::dot_for("Passed"));
+        assert_ne!(super::dot_for("Cancelled"), super::dot_for("Passed"));
+        assert_eq!(super::dot_for("Passed"), super::dot_for("Failed"), "same glyph, colour differs");
+        assert_ne!(super::status_color("Passed"), super::status_color("Failed"));
+        assert_ne!(super::status_color("Building"), super::status_color("Passed"));
+        // Anything unrecognised falls back rather than panicking.
+        assert_eq!(super::dot_for("SomethingNew"), super::dot_for(""));
+    }
 }

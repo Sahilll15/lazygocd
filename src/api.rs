@@ -557,3 +557,36 @@ fn truncate(s: &str) -> String {
     }
     t.chars().take(300).collect()
 }
+
+#[cfg(test)]
+mod tests {
+    // A proxy or load balancer in front of GoCD answers with an HTML page, and
+    // that markup used to be echoed straight into the one-line status bar.
+    #[test]
+    fn html_error_bodies_collapse_instead_of_leaking_markup() {
+        let html = "<html>\n<head><title>403 Forbidden</title></head>\n<body></body>\n</html>";
+        let out = super::truncate(html);
+        assert!(!out.contains('<'), "markup leaked: {out:?}");
+        assert!(out.contains("proxy") || out.contains("gateway"), "unhelpful: {out:?}");
+
+        // Leading whitespace must not defeat the detection.
+        assert_eq!(super::truncate("  \n <html>x</html>"), super::truncate("<html>x</html>"));
+    }
+
+    #[test]
+    fn json_error_bodies_pass_through_but_stay_bounded() {
+        let json = r#"{"message":"Pipeline not found"}"#;
+        assert_eq!(super::truncate(json), json);
+
+        let long = "x".repeat(1000);
+        assert_eq!(super::truncate(&long).chars().count(), 300);
+    }
+
+    // Non-ASCII in an error body must not panic the truncation.
+    #[test]
+    fn truncate_counts_characters_not_bytes() {
+        let unicode = "\u{5931}\u{6557}".repeat(400);
+        let out = super::truncate(&unicode);
+        assert_eq!(out.chars().count(), 300);
+    }
+}

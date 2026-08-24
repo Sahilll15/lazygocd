@@ -46,6 +46,11 @@ impl GitHubClient {
         })
     }
 
+    #[cfg(test)]
+    pub fn api_base_for_test(&self) -> &str {
+        &self.api_base
+    }
+
     /// Latest commit SHA on a branch. Works unauthenticated for public repos
     /// (rate-limited); private repos need a token with repo read access.
     pub fn latest_commit(&self, owner: &str, repo: &str, branch: &str) -> Result<String> {
@@ -77,4 +82,27 @@ impl GitHubClient {
 
 fn truncate(s: &str) -> String {
     s.chars().take(300).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    // An explicitly configured token must win, and a blank one must not count
+    // as configured: that would silently skip the `gh auth token` fallback.
+    #[test]
+    fn configured_token_wins_and_blank_is_not_configured() {
+        assert_eq!(super::resolve_token(Some("ghp_explicit".into())), Some("ghp_explicit".into()));
+        // Blank or whitespace falls through to the gh CLI (which may return
+        // None on a machine without gh; either way it is not the blank value).
+        assert_ne!(super::resolve_token(Some("   ".into())), Some("   ".into()));
+        assert_ne!(super::resolve_token(Some("".into())), Some("".into()));
+    }
+
+    #[test]
+    fn api_base_trailing_slash_is_normalised() {
+        // A trailing slash would produce '//repos/...' in every request URL.
+        let c = super::GitHubClient::new(None, "https://ghe.corp.io/api/v3/").unwrap();
+        assert_eq!(c.api_base_for_test(), "https://ghe.corp.io/api/v3");
+        let d = super::GitHubClient::new(None, "https://api.github.com").unwrap();
+        assert_eq!(d.api_base_for_test(), "https://api.github.com");
+    }
 }

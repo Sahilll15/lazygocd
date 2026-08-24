@@ -545,6 +545,129 @@ mod tests {
         assert!(inst.git_refs().is_empty());
         assert!(inst.git_ref().is_none());
     }
+
+    fn pipeline_material(revision: &str) -> MaterialRevision {
+        MaterialRevision {
+            material: MaterialInfo {
+                kind: Some("Pipeline".into()),
+                description: Some("upstream [ stage ]".into()),
+            },
+            modifications: vec![Modification {
+                revision: Some(revision.into()),
+                user_name: None,
+                comment: None,
+                modified_time: None,
+            }],
+        }
+    }
+
+    fn instance_with(revisions: Vec<MaterialRevision>) -> PipelineInstance {
+        PipelineInstance {
+            name: "deploy".into(),
+            label: "l".into(),
+            counter: 12,
+            comment: None,
+            scheduled_date: None,
+            stages: Vec::new(),
+            build_cause: Some(BuildCause {
+                trigger_message: None,
+                approver: None,
+                material_revisions: revisions,
+            }),
+        }
+    }
+
+    // A deploy run's only material is an upstream dependency, so this parse is
+    // the whole reason the GitHub check works on deploy pipelines at all.
+    #[test]
+    fn upstream_deps_parses_pipeline_material_revisions() {
+        let inst = instance_with(vec![pipeline_material("my-build/389/lint-test-build/1")]);
+        assert_eq!(upstream_deps(&inst), vec![("my-build".to_string(), 389)]);
+    }
+
+    #[test]
+    fn upstream_deps_ignores_git_materials_and_malformed_revisions() {
+        let git = git_revision("git@github.com:a/b.git", "main", "deadbeef");
+        assert!(upstream_deps(&instance_with(vec![git])).is_empty());
+
+        for bad in ["no-slashes", "name/notanumber/stage/1", "/389/stage/1"] {
+            assert!(
+                upstream_deps(&instance_with(vec![pipeline_material(bad)])).is_empty(),
+                "{bad:?} should not yield a dependency"
+            );
+        }
+    }
+
+    #[test]
+    fn upstream_deps_returns_every_dependency_in_order() {
+        let inst = instance_with(vec![
+            pipeline_material("build-a/10/stage/1"),
+            pipeline_material("build-b/22/stage/1"),
+        ]);
+        assert_eq!(
+            upstream_deps(&inst),
+            vec![("build-a".to_string(), 10), ("build-b".to_string(), 22)]
+        );
+    }
+
+    #[test]
+    fn flatten_artifacts_walks_the_tree_and_keeps_depth() {
+        let file = |name: &str, url: &str| ArtifactNode {
+            name: name.into(),
+            url: Some(url.into()),
+            kind: Some("file".into()),
+            files: vec![],
+        };
+        let tree = vec![ArtifactNode {
+            name: "dist".into(),
+            url: None,
+            kind: Some("folder".into()),
+            files: vec![
+                file("app.tar.gz", "https://x/app.tar.gz"),
+                ArtifactNode {
+                    name: "maps".into(),
+                    url: None,
+                    kind: Some("folder".into()),
+                    files: vec![file("a.map", "https://x/a.map")],
+                },
+            ],
+        }];
+        let rows = flatten_artifacts(&tree);
+        let shape: Vec<(usize, &str, bool)> =
+            rows.iter().map(|(d, n, is_dir, _)| (*d, n.as_str(), *is_dir)).collect();
+        assert_eq!(
+            shape,
+            vec![
+                (0, "dist", true),
+                (1, "app.tar.gz", false),
+                (1, "maps", true),
+                (2, "a.map", false),
+            ]
+        );
+        // Files keep a URL so 'o' and 'y' have something to act on; folders don't.
+        assert_eq!(rows[1].3.as_deref(), Some("https://x/app.tar.gz"));
+        assert_eq!(rows[0].3, None);
+    }
+
+    // Drives whether 'X' can cancel: wrong here means offering to cancel a
+    // finished run, or refusing to cancel a live one.
+    #[test]
+    fn stage_is_active_only_while_running_or_scheduled() {
+        let stage = |st: Option<&str>| StageInstance {
+            name: "build".into(),
+            status: st.map(str::to_string),
+            approval_type: None,
+            scheduled_date: None,
+            counter: None,
+            jobs: vec![],
+        };
+        assert!(stage(Some("Building")).is_active());
+        assert!(stage(Some("Scheduled")).is_active());
+        for done in ["Passed", "Failed", "Cancelled", "Unknown"] {
+            assert!(!stage(Some(done)).is_active(), "{done} should not be active");
+        }
+        assert!(!stage(None).is_active());
+    }
 }
 
 /// A personalized dashboard view ("filter") from GoCD's pipeline_selection API -
