@@ -351,6 +351,10 @@ pub struct App {
     /// config directory, so a demo can be screen-shared safely.
     pub demo: bool,
 
+    /// Set by 'e'. Only the main loop can suspend the terminal safely, so it
+    /// drains this rather than the app spawning an editor mid-draw.
+    pub pending_edit: Option<crate::editor::EditRequest>,
+
     /// Bumped on reconnect; in-flight responses from a previous server are
     /// dropped when their generation doesn't match.
     pub server_gen: u64,
@@ -489,6 +493,7 @@ impl App {
             active_view: None,
             views_error: None,
             demo,
+            pending_edit: None,
             favorites: if demo {
                 // Real favorites are internal pipeline names. Reading them here
                 // leaked them into a mode built for public screenshots.
@@ -1433,6 +1438,24 @@ impl App {
                 }
                 _ => state.scroll = state.scroll.saturating_add(1),
             },
+            KeyCode::Char('e') => {
+                let j = &state.job_ref;
+                let (suffix, body) = match state.tab {
+                    JobTab::Materials => ("materials.txt", state.materials.join("\n")),
+                    _ => ("console.log", state.lines.join("\n")),
+                };
+                if body.trim().is_empty() {
+                    self.status_line = "Nothing to open yet".to_string();
+                } else {
+                    self.pending_edit = Some(crate::editor::EditRequest {
+                        file_name: format!(
+                            "{}-{}-{}-{}-{suffix}",
+                            j.pipeline, j.pipeline_counter, j.stage, j.job
+                        ),
+                        contents: body,
+                    });
+                }
+            }
             KeyCode::Char('y') if state.tab == JobTab::Artifacts => {
                 if let Some((_, name, _, Some(url))) = state
                     .artifacts

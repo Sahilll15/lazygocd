@@ -788,6 +788,7 @@ fn draw_help(f: &mut Frame, area: Rect) {
         ("/", "search log", false),
         ("n/N", "next / prev hit", false),
         ("g/G", "top / bottom", false),
+        ("e", "open in $EDITOR", false),
         ("y", "copy artifact url", false),
         ("q/esc", "close", false),
     ];

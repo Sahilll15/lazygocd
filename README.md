@@ -115,6 +115,7 @@ Env vars override the config for scripting: `GOCD_URL`, `GOCD_USERNAME`, `GOCD_P
 | `v` | switch personalized dashboard view (your GoCD web-UI tabs) |
 | `V` | save the current filter matches as a new GoCD view |
 | `y` | copy: commit SHA (history/details), pipeline/group name (tree), artifact URL (job view) |
+| `e` | open the current log in `$VISUAL` / `$EDITOR` (vim, nvim, code, zed) |
 | `X` | cancel the currently running stage (confirm) |
 | `R` | rerun the failed jobs of the selected run's failed stage (`a` in the confirm reruns the whole stage) |
 | `o` | open the selected run's commit on GitHub (or the pending diff when the deploy is behind) |

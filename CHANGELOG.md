@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.8.0 - 2026-08-22
+
+- `e` opens the current log in your own editor. lazygocd writes the buffer to a
+  temp file, suspends the terminal properly (mouse capture off, alternate screen
+  released), runs `$VISUAL` or `$EDITOR`, then restores and cleans up. Inline
+  editors like vim and nvim take over the terminal; GUI editors like code and
+  zed open beside it and the TUI returns immediately. Works on the Console and
+  Materials tabs.
+
 ## v0.7.0 - 2026-08-22
 
 - The GitHub deployed-commit check now works on deploy pipelines. A deploy run

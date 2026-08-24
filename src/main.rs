@@ -2,6 +2,7 @@ mod api;
 mod app;
 mod config;
 mod demo;
+mod editor;
 mod github;
 mod model;
 mod notify;
@@ -119,6 +120,31 @@ fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> anyhow::Result
         } else {
             Duration::from_millis(250)
         };
+        // Hand the terminal to the user's editor, then take it back. Order
+        // matters: mouse capture off and alternate screen left before the child
+        // starts, both restored after, or the terminal is left unusable.
+        if let Some(req) = app.pending_edit.take() {
+            let _ = crossterm::execute!(std::io::stdout(), DisableMouseCapture);
+            ratatui::restore();
+
+            let outcome = editor::edit(&req);
+
+            *terminal = ratatui::init();
+            let _ = crossterm::execute!(std::io::stdout(), EnableMouseCapture);
+            terminal.clear()?;
+            dirty = true;
+
+            match outcome {
+                Ok(()) => {
+                    let path = editor::temp_path(&req.file_name);
+                    app.status_line = format!("Closed {}", path.display());
+                    editor::discard(&path);
+                }
+                Err(e) => app.error_line = Some(format!("{e:#}")),
+            }
+            continue;
+        }
+
         if event::poll(timeout)? {
             // Drain every queued event so a burst (held key, wheel fling)
             // coalesces into a single redraw instead of one frame per event.
