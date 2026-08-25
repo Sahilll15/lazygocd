@@ -402,18 +402,56 @@ pub struct ArtifactNode {
 }
 
 /// Flattened artifact row for list rendering: (indent depth, name, is_folder, url).
-pub type ArtifactRow = (usize, String, bool, Option<String>);
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ArtifactRow {
+    pub depth: usize,
+    pub name: String,
+    pub is_folder: bool,
+    pub url: Option<String>,
+    /// Slash-joined ancestry ("dist/sourcemaps"), the identity used to remember
+    /// which folders are open. Names alone collide across branches.
+    pub path: String,
+    pub expanded: bool,
+}
 
-pub fn flatten_artifacts(nodes: &[ArtifactNode]) -> Vec<ArtifactRow> {
-    fn walk(nodes: &[ArtifactNode], depth: usize, out: &mut Vec<ArtifactRow>) {
+/// Rows currently visible, given the set of open folders. A build can attach a
+/// deep artifact tree, so folders start closed and only opened ones are walked.
+pub fn flatten_artifacts(
+    nodes: &[ArtifactNode],
+    expanded: &std::collections::HashSet<String>,
+) -> Vec<ArtifactRow> {
+    fn walk(
+        nodes: &[ArtifactNode],
+        depth: usize,
+        prefix: &str,
+        expanded: &std::collections::HashSet<String>,
+        out: &mut Vec<ArtifactRow>,
+    ) {
         for n in nodes {
-            let folder = n.kind.as_deref() == Some("folder");
-            out.push((depth, n.name.clone(), folder, n.url.clone()));
-            walk(&n.files, depth + 1, out);
+            // GoCD marks folders with a type, but a node carrying children is
+            // one regardless of what the type field says.
+            let is_folder = n.kind.as_deref() == Some("folder") || !n.files.is_empty();
+            let path = if prefix.is_empty() {
+                n.name.clone()
+            } else {
+                format!("{prefix}/{}", n.name)
+            };
+            let open = is_folder && expanded.contains(&path);
+            out.push(ArtifactRow {
+                depth,
+                name: n.name.clone(),
+                is_folder,
+                url: n.url.clone(),
+                path: path.clone(),
+                expanded: open,
+            });
+            if open {
+                walk(&n.files, depth + 1, &path, expanded, out);
+            }
         }
     }
     let mut out = Vec::new();
-    walk(nodes, 0, &mut out);
+    walk(nodes, 0, "", expanded, &mut out);
     out
 }
 
@@ -632,21 +670,40 @@ mod tests {
                 },
             ],
         }];
-        let rows = flatten_artifacts(&tree);
+        use std::collections::HashSet;
+
+        // Closed by default: only the top level is visible.
+        let none = HashSet::new();
+        let rows = flatten_artifacts(&tree, &none);
+        assert_eq!(rows.len(), 1, "a closed folder must not show its children");
+        assert_eq!(rows[0].name, "dist");
+        assert!(rows[0].is_folder);
+        assert!(!rows[0].expanded);
+
+        // Opening one folder reveals only its direct children.
+        let open_dist: HashSet<String> = ["dist".to_string()].into_iter().collect();
+        let rows = flatten_artifacts(&tree, &open_dist);
         let shape: Vec<(usize, &str, bool)> =
-            rows.iter().map(|(d, n, is_dir, _)| (*d, n.as_str(), *is_dir)).collect();
+            rows.iter().map(|r| (r.depth, r.name.as_str(), r.is_folder)).collect();
         assert_eq!(
             shape,
-            vec![
-                (0, "dist", true),
-                (1, "app.tar.gz", false),
-                (1, "maps", true),
-                (2, "a.map", false),
-            ]
+            vec![(0, "dist", true), (1, "app.tar.gz", false), (1, "maps", true)],
+            "a nested folder stays closed until opened itself"
         );
+
+        // Opening the nested one too walks the full depth.
+        let open_both: HashSet<String> =
+            ["dist".to_string(), "dist/maps".to_string()].into_iter().collect();
+        let rows = flatten_artifacts(&tree, &open_both);
+        assert_eq!(rows.len(), 4);
+        assert_eq!(rows[3].name, "a.map");
+        assert_eq!(rows[3].depth, 2);
+        // Paths are ancestry-qualified so same-named folders never share state.
+        assert_eq!(rows[2].path, "dist/maps");
+
         // Files keep a URL so 'o' and 'y' have something to act on; folders don't.
-        assert_eq!(rows[1].3.as_deref(), Some("https://x/app.tar.gz"));
-        assert_eq!(rows[0].3, None);
+        assert_eq!(rows[1].url.as_deref(), Some("https://x/app.tar.gz"));
+        assert_eq!(rows[0].url, None);
     }
 
     // Drives whether 'X' can cancel: wrong here means offering to cancel a
@@ -667,6 +724,61 @@ mod tests {
             assert!(!stage(Some(done)).is_active(), "{done} should not be active");
         }
         assert!(!stage(None).is_active());
+    }
+
+    // A node with children is a folder even if GoCD omits the type field,
+    // otherwise its children would be unreachable.
+    #[test]
+    fn a_node_with_children_counts_as_a_folder_without_a_type() {
+        use std::collections::HashSet;
+        let tree = vec![ArtifactNode {
+            name: "untyped".into(),
+            url: None,
+            kind: None,
+            files: vec![ArtifactNode {
+                name: "inner.txt".into(),
+                url: Some("https://x/inner.txt".into()),
+                kind: None,
+                files: vec![],
+            }],
+        }];
+        let rows = flatten_artifacts(&tree, &HashSet::new());
+        assert_eq!(rows.len(), 1);
+        assert!(rows[0].is_folder, "a node with children must be expandable");
+
+        let open: HashSet<String> = ["untyped".to_string()].into_iter().collect();
+        assert_eq!(flatten_artifacts(&tree, &open).len(), 2);
+    }
+
+    // Same folder name under different parents must not share open state.
+    #[test]
+    fn identically_named_folders_have_distinct_paths() {
+        use std::collections::HashSet;
+        let leaf = |n: &str| ArtifactNode {
+            name: n.into(),
+            url: Some("https://x".into()),
+            kind: Some("file".into()),
+            files: vec![],
+        };
+        let branch = |n: &str| ArtifactNode {
+            name: n.into(),
+            url: None,
+            kind: Some("folder".into()),
+            files: vec![ArtifactNode {
+                name: "logs".into(),
+                url: None,
+                kind: Some("folder".into()),
+                files: vec![leaf("a.txt")],
+            }],
+        };
+        let tree = vec![branch("one"), branch("two")];
+        let open: HashSet<String> =
+            ["one".to_string(), "one/logs".to_string(), "two".to_string()].into_iter().collect();
+        let rows = flatten_artifacts(&tree, &open);
+        let opened: Vec<(&str, bool)> =
+            rows.iter().map(|r| (r.path.as_str(), r.expanded)).collect();
+        assert!(opened.contains(&("one/logs", true)));
+        assert!(opened.contains(&("two/logs", false)), "two/logs must stay closed");
     }
 }
 

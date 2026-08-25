@@ -116,6 +116,7 @@ Env vars override the config for scripting: `GOCD_URL`, `GOCD_USERNAME`, `GOCD_P
 | `V` | save the current filter matches as a new GoCD view |
 | `y` | copy: commit SHA (history/details), pipeline/group name (tree), artifact URL (job view) |
 | `e` | open the current log in `$VISUAL` / `$EDITOR` (vim, nvim, code, zed) |
+| `enter` (Artifacts) | open or close a folder; on a file, open it in the browser |
 
 Set your editor once in `~/.zshrc`:
 

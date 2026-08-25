@@ -1116,7 +1116,7 @@ fn draw_console_log(f: &mut Frame, area: Rect, state: &ConsoleLogState, tick: u6
             "tab/1-3 switch   / search   n/N match   j/k scroll   e editor   r refresh   q/esc close"
         }
         JobTab::Artifacts => {
-            "tab/1-3 switch   j/k select   enter/o open in browser   y copy url   q/esc close"
+            "tab/1-3 switch   j/k select   enter open/close   o browser   y copy url   q/esc close"
         }
         JobTab::Materials => "tab/1-3 switch   j/k scroll   e editor   q/esc close",
     };
@@ -1199,22 +1199,28 @@ fn draw_artifacts_tab(f: &mut Frame, content_area: Rect, state: &ConsoleLogState
         .enumerate()
         .skip(offset)
         .take(visible)
-        .map(|(i, (depth, name, folder, _))| {
-            let icon = if *folder { "\u{25b8} " } else { "  " };
+        .map(|(i, row)| {
+            // Closed and open folders must look different, or there is no way to
+            // tell an empty folder from an unopened one.
+            let icon = match (row.is_folder, row.expanded) {
+                (true, true) => "\u{25be} ",
+                (true, false) => "\u{25b8} ",
+                _ => "  ",
+            };
             let selected = i == state.artifact_selected;
             let style = if selected {
                 Style::default()
                     .fg(theme::ACCENT)
                     .add_modifier(Modifier::BOLD)
-            } else if *folder {
+            } else if row.is_folder {
                 Style::default().add_modifier(Modifier::BOLD)
             } else {
                 Style::default()
             };
             Line::from(vec![
                 Span::raw(if selected { "\u{25b6} " } else { "  " }.to_string()),
-                Span::raw("  ".repeat(*depth)),
-                Span::styled(format!("{icon}{name}"), style),
+                Span::raw("  ".repeat(row.depth)),
+                Span::styled(format!("{icon}{}", row.name), style),
             ])
         })
         .collect();

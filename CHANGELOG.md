@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.10.0 - 2026-08-22
+
+- The Artifacts tab is a real tree now. Every folder was permanently expanded,
+  because the API tree was flattened once at fetch time and the structure thrown
+  away, so a build with a deep artifact tree filled the pane with rows you could
+  not collapse. Folders now start closed: `enter` opens or closes one, `l`/right
+  opens, `h`/left closes and steps out to the parent, and an open folder shows
+  ▾ against a closed ▸.
+- A node carrying children counts as a folder even when GoCD omits the type
+  field, which previously left its children unreachable.
+- Folder state is keyed by full path, so two folders with the same name under
+  different parents no longer open together.
+
 ## v0.9.0 - 2026-08-22
 
 - `editor` setting in config.toml, so `e` no longer depends on the shell. Many

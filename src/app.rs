@@ -97,7 +97,13 @@ pub struct ConsoleLogState {
     pub matches: Vec<usize>,
     pub match_idx: usize,
 
+    /// Raw tree from the API, kept so folders can be expanded on demand.
+    pub artifact_tree: Option<Vec<crate::model::ArtifactNode>>,
+    /// Currently visible rows, derived from the tree and the open set.
     pub artifacts: Option<Vec<crate::model::ArtifactRow>>,
+    /// Paths of open folders. Empty means everything is collapsed, which is
+    /// the default: an artifact tree can be deep.
+    pub artifacts_expanded: std::collections::HashSet<String>,
     pub artifacts_loading: bool,
     pub artifact_selected: usize,
     /// Pre-rendered material lines captured from the run at open time.
@@ -1075,7 +1081,9 @@ impl App {
                     state.artifacts_loading = false;
                     match result {
                         Ok(nodes) => {
-                            state.artifacts = Some(flatten_artifacts(&nodes));
+                            state.artifacts =
+                                Some(flatten_artifacts(&nodes, &state.artifacts_expanded));
+                            state.artifact_tree = Some(nodes);
                             state.artifact_selected = 0;
                         }
                         Err(e) => state.error = Some(e),
@@ -1458,29 +1466,70 @@ impl App {
                 }
             }
             KeyCode::Char('y') if state.tab == JobTab::Artifacts => {
-                if let Some((_, name, _, Some(url))) = state
+                if let Some(row) = state
                     .artifacts
                     .as_ref()
                     .and_then(|a| a.get(state.artifact_selected))
                     .cloned()
+                    && let Some(url) = row.url
                 {
                     match copy_to_clipboard(&url) {
-                        Ok(()) => self.status_line = format!("Copied url for {name}"),
+                        Ok(()) => self.status_line = format!("Copied url for {}", row.name),
                         Err(e) => self.error_line = Some(format!("Copy failed: {e}")),
                     }
                 }
             }
-            KeyCode::Enter | KeyCode::Char('o') if state.tab == JobTab::Artifacts => {
-                if let Some((_, name, folder, Some(url))) = state
+            // Enter on a folder opens or closes it; on a file it goes to the
+            // browser. 'l'/right open, 'h'/left close, matching the tree pane.
+            KeyCode::Enter | KeyCode::Char('o') | KeyCode::Char('l') | KeyCode::Right
+                if state.tab == JobTab::Artifacts =>
+            {
+                if let Some(row) = state
                     .artifacts
                     .as_ref()
                     .and_then(|a| a.get(state.artifact_selected))
                     .cloned()
-                    && !folder
                 {
-                    match open_url(&url) {
-                        Ok(()) => self.status_line = format!("Opened {name}"),
-                        Err(e) => self.error_line = Some(format!("Couldn't open browser: {e}")),
+                    if row.is_folder {
+                        let closing = state.artifacts_expanded.contains(&row.path);
+                        // 'l'/right only ever open, so repeated presses don't toggle shut.
+                        let open_only = matches!(key.code, KeyCode::Char('l') | KeyCode::Right);
+                        if closing && !open_only {
+                            state.artifacts_expanded.remove(&row.path);
+                        } else {
+                            state.artifacts_expanded.insert(row.path.clone());
+                        }
+                        reflow_artifacts(&mut state);
+                    } else if let Some(url) = row.url {
+                        match open_url(&url) {
+                            Ok(()) => self.status_line = format!("Opened {}", row.name),
+                            Err(e) => self.error_line = Some(format!("Couldn't open browser: {e}")),
+                        }
+                    }
+                }
+            }
+            KeyCode::Char('h') | KeyCode::Left if state.tab == JobTab::Artifacts => {
+                if let Some(row) = state
+                    .artifacts
+                    .as_ref()
+                    .and_then(|a| a.get(state.artifact_selected))
+                    .cloned()
+                {
+                    // On a closed file or folder, step out to the parent instead
+                    // of doing nothing, which is what a tree is expected to do.
+                    let target = if row.is_folder && state.artifacts_expanded.contains(&row.path) {
+                        Some(row.path.clone())
+                    } else {
+                        row.path.rsplit_once('/').map(|(parent, _)| parent.to_string())
+                    };
+                    if let Some(t) = target {
+                        state.artifacts_expanded.remove(&t);
+                        reflow_artifacts(&mut state);
+                        if let Some(rows) = &state.artifacts
+                            && let Some(i) = rows.iter().position(|r| r.path == t)
+                        {
+                            state.artifact_selected = i;
+                        }
                     }
                 }
             }
@@ -2411,7 +2460,9 @@ impl App {
             search_active: false,
             matches: Vec::new(),
             match_idx: 0,
+            artifact_tree: None,
             artifacts: None,
+            artifacts_expanded: std::collections::HashSet::new(),
             artifacts_loading: false,
             artifact_selected: 0,
             materials,
@@ -2642,6 +2693,16 @@ impl App {
 
 /// Following mode parks scroll at usize::MAX; pin it back to the real bottom
 /// before scrolling up, or the subtraction never becomes visible.
+/// Recomputes the visible rows after an expand or collapse, keeping the
+/// selection inside the new list.
+fn reflow_artifacts(state: &mut ConsoleLogState) {
+    if let Some(tree) = &state.artifact_tree {
+        let rows = flatten_artifacts(tree, &state.artifacts_expanded);
+        state.artifact_selected = state.artifact_selected.min(rows.len().saturating_sub(1));
+        state.artifacts = Some(rows);
+    }
+}
+
 fn console_scroll_up(state: &mut ConsoleLogState, view_height: u16, lines: usize) {
     let content_len = match state.tab {
         JobTab::Materials => state.materials.len(),
