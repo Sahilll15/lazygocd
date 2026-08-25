@@ -262,6 +262,9 @@ impl PipelineInstance {
                 let (host, owner, repo) = parse_git_host_owner_repo(desc)?;
                 let branch = parse_branch(desc).unwrap_or_else(|| "main".to_string());
                 let deployed_sha = mr.modifications.first()?.revision.clone()?;
+                if !is_safe_segment(&deployed_sha) {
+                    return None;
+                }
                 Some(GitRef {
                     via: None,
                     host,
@@ -306,6 +309,20 @@ pub fn upstream_deps(inst: &PipelineInstance) -> Vec<(String, i64)> {
         .collect()
 }
 
+/// A material description is server data, and these parts are interpolated into
+/// a URL that gets handed to the OS. Anything outside this set is rejected.
+pub fn is_safe_host(s: &str) -> bool {
+    !s.is_empty()
+        && s.chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | ':'))
+}
+
+pub fn is_safe_segment(s: &str) -> bool {
+    !s.is_empty()
+        && s.chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_'))
+}
+
 /// GoCD's Git material description reads like:
 /// "URL: git@HOST:owner/repo.git, Branch: main" or "URL: https://HOST/owner/repo, ..."
 fn parse_git_host_owner_repo(desc: &str) -> Option<(String, String, String)> {
@@ -324,7 +341,7 @@ fn parse_git_host_owner_repo(desc: &str) -> Option<(String, String, String)> {
         .trim_end_matches('/')
         .trim_end_matches(".git");
     let (owner, repo) = rest.split_once('/')?;
-    (!host.is_empty() && !owner.is_empty() && !repo.is_empty())
+    (is_safe_host(host) && is_safe_segment(owner) && is_safe_segment(repo))
         .then(|| (host.to_string(), owner.to_string(), repo.to_string()))
 }
 
@@ -504,6 +521,25 @@ mod tests {
         assert_eq!(f("URL: /local/bare/repo.git, Branch: main"), None);
         assert_eq!(f("no url here"), None);
         assert_eq!(f("URL: https://host/only-owner, Branch: x"), None);
+    }
+
+    // These parts end up in a URL handed to the OS, and on Windows that route
+    // goes through `cmd /C start`, which re-parses & | ^ as separators.
+    #[test]
+    fn hostile_material_urls_are_rejected() {
+        let f = |desc: &str| parse_git_host_owner_repo(desc);
+        for hostile in [
+            "URL: https://github.com&calc/acme/web-app, Branch: main",
+            "URL: https://github.com|whoami/acme/web-app, Branch: main",
+            "URL: https://github.com^x/acme/web-app, Branch: main",
+            "URL: https://github.com/acme&calc/web-app, Branch: main",
+            "URL: https://github.com/acme/web-app&calc, Branch: main",
+            "URL: https://github.com/acme/web app, Branch: main",
+            "URL: https://github.com/../../etc/passwd, Branch: main",
+            "URL: git@github.com&calc:acme/web-app.git, Branch: main",
+        ] {
+            assert_eq!(f(hostile), None, "accepted {hostile:?}");
+        }
     }
 
     fn git_revision(url: &str, branch: &str, sha: &str) -> MaterialRevision {

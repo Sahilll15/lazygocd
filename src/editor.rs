@@ -69,18 +69,69 @@ fn sanitize(name: &str) -> String {
     cleaned.trim_matches('-').to_string()
 }
 
-pub fn temp_path(file_name: &str) -> PathBuf {
-    let mut p = std::env::temp_dir();
-    p.push(format!("lazygocd-{}", sanitize(file_name)));
-    p
+#[cfg(unix)]
+fn current_uid() -> Option<u32> {
+    use std::os::unix::fs::MetadataExt;
+    let home = dirs::home_dir()?;
+    Some(std::fs::metadata(home).ok()?.uid())
+}
+
+/// Console logs routinely carry build secrets and the system temp dir is shared,
+/// so logs go in a private per-user subdirectory rather than loose in /tmp.
+pub fn session_dir() -> Result<PathBuf> {
+    let mut dir = std::env::temp_dir();
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::{DirBuilderExt, MetadataExt, PermissionsExt};
+        let uid = current_uid();
+        dir.push(format!(
+            "lazygocd-{}",
+            uid.map(|u| u.to_string()).unwrap_or_else(|| "user".into())
+        ));
+        if !dir.exists() {
+            std::fs::DirBuilder::new()
+                .recursive(true)
+                .mode(0o700)
+                .create(&dir)
+                .with_context(|| format!("creating {}", dir.display()))?;
+        }
+        // symlink_metadata, not metadata: a symlink planted here would otherwise
+        // redirect the write and pass every check that follows.
+        let meta = std::fs::symlink_metadata(&dir)
+            .with_context(|| format!("checking {}", dir.display()))?;
+        if !meta.is_dir() {
+            anyhow::bail!("{} exists and is not a directory", dir.display());
+        }
+        if let Some(uid) = uid
+            && meta.uid() != uid
+        {
+            anyhow::bail!("{} is owned by another user", dir.display());
+        }
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700)).ok();
+    }
+
+    #[cfg(not(unix))]
+    {
+        dir.push("lazygocd");
+        std::fs::create_dir_all(&dir).with_context(|| format!("creating {}", dir.display()))?;
+    }
+
+    Ok(dir)
+}
+
+pub fn temp_path(file_name: &str) -> Result<PathBuf> {
+    let mut p = session_dir()?;
+    p.push(sanitize(file_name));
+    Ok(p)
 }
 
 /// Writes the buffer and blocks on the editor. A GUI editor that forks
 /// (`code`, `zed`) returns immediately, which is the behaviour people expect:
 /// the window opens beside the terminal and the TUI comes straight back.
 pub fn edit(req: &EditRequest) -> Result<()> {
-    let path = temp_path(&req.file_name);
-    std::fs::write(&path, &req.contents)
+    let path = temp_path(&req.file_name)?;
+    crate::config::write_private(&path, &req.contents)
         .with_context(|| format!("writing {}", path.display()))?;
     let (program, args) = resolve_editor(req.configured.as_deref());
     let status = Command::new(&program)
@@ -104,25 +155,35 @@ pub fn edit(req: &EditRequest) -> Result<()> {
 /// then yanks it out from under the open tab. Instead the file is left alone and
 /// stale ones are swept on the next start.
 pub fn cleanup_stale(max_age: Duration) {
-    let Ok(entries) = std::fs::read_dir(std::env::temp_dir()) else {
-        return;
-    };
     let now = SystemTime::now();
-    for entry in entries.flatten() {
-        let name = entry.file_name();
-        let Some(name) = name.to_str() else { continue };
-        if !name.starts_with("lazygocd-") {
-            continue;
+    let sweep = |dir: PathBuf, prefixed: bool| {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+            let Some(name) = name.to_str() else { continue };
+            if prefixed && !name.starts_with("lazygocd-") {
+                continue;
+            }
+            let Ok(meta) = entry.metadata() else { continue };
+            if meta.is_dir() {
+                continue;
+            }
+            let stale = meta
+                .modified()
+                .map(|t| now.duration_since(t).unwrap_or_default() > max_age)
+                .unwrap_or(false);
+            if stale {
+                let _ = std::fs::remove_file(entry.path());
+            }
         }
-        let stale = entry
-            .metadata()
-            .and_then(|m| m.modified())
-            .map(|t| now.duration_since(t).unwrap_or_default() > max_age)
-            .unwrap_or(false);
-        if stale {
-            let _ = std::fs::remove_file(entry.path());
-        }
+    };
+    if let Ok(dir) = session_dir() {
+        sweep(dir, false);
     }
+    // Versions before 0.10.3 wrote logs loose in the temp root.
+    sweep(std::env::temp_dir(), true);
 }
 
 #[cfg(test)]
@@ -171,9 +232,34 @@ mod tests {
     }
 
     #[test]
-    fn temp_path_stays_inside_the_temp_dir() {
-        let p = super::temp_path("../../escape.log");
-        assert_eq!(p.parent().unwrap(), std::env::temp_dir());
-        assert!(p.file_name().unwrap().to_string_lossy().starts_with("lazygocd-"));
+    fn temp_path_stays_inside_the_private_session_dir() {
+        let dir = super::session_dir().unwrap();
+        let p = super::temp_path("../../escape.log").unwrap();
+        assert_eq!(p.parent().unwrap(), dir);
+        assert!(dir.starts_with(std::env::temp_dir()));
+    }
+
+    // The log can hold build secrets, so neither the directory nor the file may
+    // be readable by other users on the machine.
+    #[cfg(unix)]
+    #[test]
+    fn session_dir_and_log_are_owner_only() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = super::session_dir().unwrap();
+        let mode = std::fs::metadata(&dir).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o700, "session dir is {mode:o}");
+
+        let path = super::temp_path("perm-check.log").unwrap();
+        crate::config::write_private(&path, "secret").unwrap();
+        let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600, "log file is {mode:o}");
+
+        // A file left behind at 0644 by an older version must be tightened, not
+        // inherited: .mode() on OpenOptions only applies when creating.
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
+        crate::config::write_private(&path, "secret").unwrap();
+        let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(mode, 0o600, "pre-existing file left at {mode:o}");
     }
 }

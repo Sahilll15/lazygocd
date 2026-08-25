@@ -29,10 +29,14 @@ jobs:
       - name: Build
         run: cargo build --release --target ${{ matrix.target }}
       - name: Package
+        env:
+          REF_NAME: ${{ github.ref_name }}
+          TARGET: ${{ matrix.target }}
         run: |
-          cd target/${{ matrix.target }}/release
-          tar czf lazygocd-${{ github.ref_name }}-${{ matrix.target }}.tar.gz lazygocd
-          shasum -a 256 lazygocd-${{ github.ref_name }}-${{ matrix.target }}.tar.gz > lazygocd-${{ github.ref_name }}-${{ matrix.target }}.tar.gz.sha256
+          cd "target/$TARGET/release"
+          name="lazygocd-$REF_NAME-$TARGET"
+          tar czf "$name.tar.gz" lazygocd
+          shasum -a 256 "$name.tar.gz" > "$name.tar.gz.sha256"
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.target }}

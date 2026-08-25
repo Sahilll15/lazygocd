@@ -130,7 +130,7 @@
   <section>
     <div class="wrap">
       <h2>Where config lives</h2>
-      <p class="sec-lede">Everything is written under <code>~/.config/lazygocd/</code>. The config file is saved with mode <code>0600</code> because it holds a plaintext credential.</p>
+      <p class="sec-lede">Everything is written under <code>~/.config/lazygocd/</code>. The directory is created mode <code>0700</code> and every file in it is written mode <code>0600</code>: the config holds a plaintext credential, and the cache lists every pipeline name on your server.</p>
       <div style="max-width:760px">
         <fieldset class="panel">
           <legend>~/.config/lazygocd/config.toml</legend>
@@ -159,8 +159,8 @@
             <thead><tr><th>File</th><th>What it holds</th></tr></thead>
             <tbody>
               <tr><td><code>config.toml</code></td><td>Server URL, credentials, TLS choice, poll interval, optional GitHub token. Mode <code>0600</code>.</td></tr>
-              <tr><td><code>dashboard_cache.json</code></td><td>The last successful dashboard load, so the next launch paints instantly. Safe to delete.</td></tr>
-              <tr><td><code>favorites.json</code></td><td>Names of starred pipelines, pinned to the top of the tree.</td></tr>
+              <tr><td><code>dashboard_cache.json</code></td><td>The last successful dashboard load, so the next launch paints instantly. Mode <code>0600</code>; it lists every pipeline and group name. Safe to delete.</td></tr>
+              <tr><td><code>favorites.json</code></td><td>Names of starred pipelines, pinned to the top of the tree. Mode <code>0600</code>.</td></tr>
             </tbody>
           </table>
         </div>
@@ -180,7 +180,7 @@
             <tr><td><code>GOCD_USERNAME</code></td><td>Username for basic auth</td></tr>
             <tr><td><code>GOCD_PASSWORD</code></td><td>Password for basic auth</td></tr>
             <tr><td><code>GOCD_TOKEN</code></td><td>Access token; used instead of username/password when set</td></tr>
-            <tr><td><code>GOCD_INSECURE</code></td><td>Any value skips TLS certificate verification (e.g. <code>GOCD_INSECURE=1</code>)</td></tr>
+            <tr><td><code>GOCD_INSECURE</code></td><td>Any value skips TLS certificate verification (e.g. <code>GOCD_INSECURE=1</code>). Your token or password then rides a connection nothing authenticates, so anything on the path can read it.</td></tr>
             <tr><td><code>GITHUB_TOKEN</code></td><td>GitHub personal access token for private-repo commit checks</td></tr>
           </tbody>
         </table>

@@ -150,20 +150,52 @@ pub fn load() -> Result<Config> {
     Ok(cfg)
 }
 
-pub fn save(path: &PathBuf, cfg: &Config) -> Result<()> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).ok();
-    }
-    let text = toml::to_string_pretty(cfg)?;
-    std::fs::write(path, text).with_context(|| format!("writing config to {}", path.display()))?;
-
-    // Contains a password/token in plaintext: restrict to owner-only.
+/// Owner-only from the moment the file exists. `fs::write` followed by a chmod
+/// leaves the contents world-readable for the window in between.
+pub fn write_private(path: &Path, contents: &str) -> std::io::Result<()> {
     #[cfg(unix)]
     {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600)).ok();
+        use std::io::Write;
+        use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+        let mut f = std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .mode(0o600)
+            .open(path)?;
+        f.write_all(contents.as_bytes())?;
+        // .mode() only applies on creation, so an older 0644 file needs this too.
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))
     }
+    #[cfg(not(unix))]
+    std::fs::write(path, contents)
+}
 
+/// Creates the config directory owner-only. It holds the credential file plus
+/// the dashboard cache, which lists every pipeline name on the server.
+pub fn ensure_private_dir(dir: &Path) -> std::io::Result<()> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
+        if !dir.exists() {
+            std::fs::DirBuilder::new()
+                .recursive(true)
+                .mode(0o700)
+                .create(dir)?;
+        }
+        std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700))
+    }
+    #[cfg(not(unix))]
+    std::fs::create_dir_all(dir)
+}
+
+pub fn save(path: &Path, cfg: &Config) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        ensure_private_dir(parent).ok();
+    }
+    let text = toml::to_string_pretty(cfg)?;
+    write_private(path, &text)
+        .with_context(|| format!("writing config to {}", path.display()))?;
     Ok(())
 }
 

@@ -404,10 +404,13 @@ fn save_favorites(favorites: HashSet<String>) {
         let Ok(path) = crate::config::favorites_path() else {
             return;
         };
+        if let Some(dir) = path.parent() {
+            let _ = crate::config::ensure_private_dir(dir);
+        }
         let mut names: Vec<&String> = favorites.iter().collect();
         names.sort();
         if let Ok(text) = serde_json::to_string(&names) {
-            let _ = std::fs::write(path, text);
+            let _ = crate::config::write_private(&path, &text);
         }
     });
 }
@@ -417,6 +420,9 @@ fn save_dashboard_cache(groups: Vec<DashboardGroup>, pipelines: Vec<DashboardPip
         let Ok(path) = crate::config::dashboard_cache_path() else {
             return;
         };
+        if let Some(dir) = path.parent() {
+            let _ = crate::config::ensure_private_dir(dir);
+        }
         let saved_at_ms = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_millis() as i64)
@@ -427,7 +433,7 @@ fn save_dashboard_cache(groups: Vec<DashboardGroup>, pipelines: Vec<DashboardPip
             pipelines,
         };
         if let Ok(text) = serde_json::to_string(&cache) {
-            let _ = std::fs::write(path, text);
+            let _ = crate::config::write_private(&path, &text);
         }
     });
 }
@@ -2815,6 +2821,16 @@ fn base64(data: &[u8]) -> String {
 }
 
 fn open_url(url: &str) -> std::io::Result<()> {
+    // Windows routes through `cmd /C start`, which re-parses &, | and ^ that
+    // std's argument quoting leaves alone. The URL is built from server data.
+    if !url.chars().all(|c| {
+        c.is_ascii_alphanumeric() || matches!(c, ':' | '/' | '.' | '-' | '_' | '~' | '?' | '=' | '#')
+    }) {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "refusing to open a URL containing unexpected characters",
+        ));
+    }
     #[cfg(target_os = "macos")]
     let mut cmd = std::process::Command::new("open");
     // `start` is a cmd builtin; the empty quoted arg is its window-title slot.
@@ -2864,6 +2880,21 @@ fn format_age(saved_at_ms: i64) -> String {
 
 #[cfg(test)]
 mod tests {
+    // Windows opens URLs through `cmd /C start`, which re-parses metacharacters
+    // that std's argument quoting leaves untouched.
+    #[test]
+    fn open_url_refuses_shell_metacharacters() {
+        for hostile in [
+            "https://github.com&calc/acme/web-app/commit/abc",
+            "https://github.com/acme/web-app/commit/abc|whoami",
+            "https://github.com/acme/web app/commit/abc",
+            "https://github.com/acme/web-app/commit/`id`",
+            "https://github.com/acme/%PATH%/commit/abc",
+        ] {
+            assert!(super::open_url(hostile).is_err(), "accepted {hostile:?}");
+        }
+    }
+
     #[test]
     fn base64_rfc4648_vectors() {
         assert_eq!(super::base64(b""), "");

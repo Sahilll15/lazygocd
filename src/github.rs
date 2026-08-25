@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use crate::api::encode_segment;
 use reqwest::blocking::Client;
 use serde::Deserialize;
 
@@ -54,13 +55,23 @@ impl GitHubClient {
     /// Latest commit SHA on a branch. Works unauthenticated for public repos
     /// (rate-limited); private repos need a token with repo read access.
     pub fn latest_commit(&self, owner: &str, repo: &str, branch: &str) -> Result<String> {
-        let url = format!("{}/repos/{owner}/{repo}/commits/{branch}", self.api_base);
+        let url = format!(
+            "{}/repos/{}/{}/commits/{}",
+            self.api_base,
+            encode_segment(owner),
+            encode_segment(repo),
+            encode_segment(branch)
+        );
         let mut rb = self
             .client
             .get(&url)
             .header("Accept", "application/vnd.github+json")
             .header("User-Agent", "lazygocd");
-        if let Some(token) = &self.token {
+        // The GitHub token belongs to a different trust domain than GoCD, so it
+        // never goes out over a connection nothing authenticates.
+        if let Some(token) = &self.token
+            && self.api_base.starts_with("https://")
+        {
             rb = rb.bearer_auth(token);
         }
         let resp = rb

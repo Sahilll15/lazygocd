@@ -141,7 +141,7 @@ impl GoCdClient {
             return Ok((parsed.pipelines, next));
         }
 
-        let mut path = format!("/api/pipelines/{pipeline_name}/history");
+        let mut path = format!("/api/pipelines/{}/history", encode_segment(pipeline_name));
         if let Some(cursor) = after {
             path.push_str(&format!("?after={cursor}"));
         }
@@ -175,7 +175,7 @@ impl GoCdClient {
             return Ok(());
         }
 
-        let path = format!("/api/pipelines/{pipeline_name}/schedule");
+        let path = format!("/api/pipelines/{}/schedule", encode_segment(pipeline_name));
         let resp = self
             .request(Method::POST, &path, 1)
             .header("X-GoCD-Confirm", "true")
@@ -280,7 +280,10 @@ impl GoCdClient {
         verb: &str,
     ) -> Result<()> {
         let path = format!(
-            "/api/stages/{pipeline_name}/{pipeline_counter}/{stage_name}/{stage_counter}/{verb}"
+            "/api/stages/{}/{pipeline_counter}/{}/{}/{verb}",
+            encode_segment(pipeline_name),
+            encode_segment(stage_name),
+            encode_segment(stage_counter)
         );
         let resp = self
             .request(Method::POST, &path, 3)
@@ -303,7 +306,7 @@ impl GoCdClient {
             return Ok(());
         }
 
-        let path = format!("/api/pipelines/{pipeline_name}/pause");
+        let path = format!("/api/pipelines/{}/pause", encode_segment(pipeline_name));
         let resp = self
             .request(Method::POST, &path, 1)
             .header("X-GoCD-Confirm", "true")
@@ -326,7 +329,7 @@ impl GoCdClient {
             return Ok(());
         }
 
-        let path = format!("/api/pipelines/{pipeline_name}/unpause");
+        let path = format!("/api/pipelines/{}/unpause", encode_segment(pipeline_name));
         let resp = self
             .request(Method::POST, &path, 1)
             .header("X-GoCD-Confirm", "true")
@@ -357,7 +360,10 @@ impl GoCdClient {
         }
 
         let path = format!(
-            "/api/stages/{pipeline_name}/{pipeline_counter}/{stage_name}/{stage_counter}/cancel"
+            "/api/stages/{}/{pipeline_counter}/{}/{}/cancel",
+            encode_segment(pipeline_name),
+            encode_segment(stage_name),
+            encode_segment(stage_counter)
         );
         let resp = self
             .request(Method::POST, &path, 3)
@@ -398,7 +404,7 @@ impl GoCdClient {
                 })
                 .context("no demo instance");
         }
-        let path = format!("/api/pipelines/{name}/{counter}");
+        let path = format!("/api/pipelines/{}/{counter}", encode_segment(name));
         let resp = self
             .request(Method::GET, &path, 1)
             .send()
@@ -493,7 +499,11 @@ impl GoCdClient {
         }
 
         let path = format!(
-            "/files/{pipeline_name}/{pipeline_counter}/{stage_name}/{stage_counter}/{job_name}.json"
+            "/files/{}/{pipeline_counter}/{}/{}/{}.json",
+            encode_segment(pipeline_name),
+            encode_segment(stage_name),
+            encode_segment(stage_counter),
+            encode_segment(job_name)
         );
         let resp = self
             .request_raw(Method::GET, &path)
@@ -526,7 +536,11 @@ impl GoCdClient {
         }
 
         let mut path = format!(
-            "/files/{pipeline_name}/{pipeline_counter}/{stage_name}/{stage_counter}/{job_name}/cruise-output/console.log"
+            "/files/{}/{pipeline_counter}/{}/{}/{}/cruise-output/console.log",
+            encode_segment(pipeline_name),
+            encode_segment(stage_name),
+            encode_segment(stage_counter),
+            encode_segment(job_name)
         );
         if start_line > 0 {
             path.push_str(&format!("?startLineNumber={start_line}"));
@@ -545,6 +559,21 @@ impl GoCdClient {
         }
         Ok(body)
     }
+}
+
+/// Pipeline, stage and job names come back from the server and are interpolated
+/// into request paths. Encoding keeps each one inside its own path segment.
+pub fn encode_segment(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for b in s.bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {
+                out.push(b as char)
+            }
+            _ => out.push_str(&format!("%{b:02X}")),
+        }
+    }
+    out
 }
 
 /// Error bodies are normally GoCD JSON, but a proxy or load balancer in front of
@@ -580,6 +609,15 @@ mod tests {
 
         let long = "x".repeat(1000);
         assert_eq!(super::truncate(&long).chars().count(), 300);
+    }
+
+    #[test]
+    fn path_segments_are_percent_encoded() {
+        assert_eq!(super::encode_segment("web-app_build.1"), "web-app_build.1");
+        assert_eq!(super::encode_segment("a/b"), "a%2Fb");
+        assert_eq!(super::encode_segment("a?b#c"), "a%3Fb%23c");
+        assert_eq!(super::encode_segment("release/1.0"), "release%2F1.0");
+        assert_eq!(super::encode_segment("sp ace"), "sp%20ace");
     }
 
     // Non-ASCII in an error body must not panic the truncation.

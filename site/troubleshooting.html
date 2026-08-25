@@ -102,7 +102,7 @@
           <p>Your GoCD server uses a self-signed or internal-CA certificate. Press <kbd>A</kbd> and choose <strong>Yes</strong> at the "Skip TLS certificate verification?" step of the connect form, or launch with <code>GOCD_INSECURE=1</code>.</p>
           <div class="callout warn" style="margin-bottom:0">
             <span class="co-label">warning</span>
-            Skipping verification means the client can't detect a man-in-the-middle. Only use it for servers you trust on networks you trust; the form defaults to <strong>No</strong> for a reason.
+            Skipping verification means the client can't detect a man-in-the-middle, and your token or password is sent on every request. Anything sitting on the path can read the credential. Only use it for servers you trust on networks you trust; the form defaults to <strong>No</strong> for a reason.
           </div>
         </div>
       </article>

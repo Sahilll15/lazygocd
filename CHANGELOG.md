@@ -1,5 +1,34 @@
 # Changelog
 
+## v0.10.3 - 2026-08-25
+
+Security hardening. No feature or keybinding changed.
+
+- Logs opened with `e` are written to a private per-user directory under the
+  system temp dir (mode `0700`, file mode `0600`) instead of loose in a shared
+  `/tmp` at a predictable path. A console log routinely contains build secrets,
+  so on a multi-user Linux box any other local user could read one, and could
+  pre-create a symlink at that path to redirect the write.
+- `dashboard_cache.json` and `favorites.json` are written mode `0600`, and the
+  config directory is created mode `0700`. The cache lists every pipeline and
+  group name on the server and was world-readable.
+- `config.toml` is created owner-only rather than written and then chmodded,
+  which left the credential readable for the moment in between. An existing
+  file at looser permissions is tightened on the next write.
+- Host, owner and repo parsed out of a GoCD Git material are validated before
+  they reach a URL, and the browser handoff rejects anything unexpected.
+  Windows opens URLs through `cmd /C start`, which re-parses `&`, `|` and `^`
+  that Rust's argument quoting leaves alone, so a crafted material URL could
+  run a command when you pressed `o`.
+- Pipeline, stage, job and branch names are percent-encoded into request paths
+  rather than interpolated raw.
+- The GitHub token is only sent over `https`, never to a plain-http API base.
+- Docs now state that skipping TLS verification sends your credential over a
+  connection nothing authenticates.
+- CI: the Snyk token reaches only the scan step, not the steps that run
+  crates.io build scripts, and the release workflow no longer interpolates a
+  ref name straight into a shell command.
+
 ## v0.10.2 - 2026-08-25
 
 - No behaviour change. The source, tests, and documentation no longer carry

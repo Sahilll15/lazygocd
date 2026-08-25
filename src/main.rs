@@ -142,8 +142,10 @@ fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> anyhow::Result
                 // as soon as its window opens, so deleting now would pull the
                 // file out from under the tab. Swept on the next start instead.
                 Ok(()) => {
-                    app.status_line =
-                        format!("Opened in editor: {}", editor::temp_path(&req.file_name).display());
+                    app.status_line = match editor::temp_path(&req.file_name) {
+                        Ok(p) => format!("Opened in editor: {}", p.display()),
+                        Err(_) => "Opened in editor".to_string(),
+                    };
                 }
                 Err(e) => app.error_line = Some(format!("{e:#}")),
             }

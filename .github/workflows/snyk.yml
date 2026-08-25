@@ -14,29 +14,37 @@ jobs:
   sbom-test:
     name: SBOM vulnerability scan
     runs-on: ubuntu-latest
-    env:
-      SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Skip when Snyk is not configured
-        if: env.SNYK_TOKEN == ''
-        run: echo "SNYK_TOKEN is not configured; skipping Snyk scan."
+      # Resolves the secret to a plain flag so the steps that build the SBOM,
+      # and the crates.io build scripts they run, never see the token itself.
+      - name: Check whether Snyk is configured
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: |
+          if [ -n "$SNYK_TOKEN" ]; then
+            echo "SNYK_ENABLED=1" >> "$GITHUB_ENV"
+          else
+            echo "SNYK_TOKEN is not configured; skipping Snyk scan."
+          fi
 
       - uses: dtolnay/rust-toolchain@stable
-        if: env.SNYK_TOKEN != ''
+        if: env.SNYK_ENABLED == '1'
 
       - uses: snyk/actions/setup@master
-        if: env.SNYK_TOKEN != ''
+        if: env.SNYK_ENABLED == '1'
 
       - name: Install CycloneDX Cargo generator
-        if: env.SNYK_TOKEN != ''
+        if: env.SNYK_ENABLED == '1'
         run: cargo install cargo-cyclonedx --locked
 
       - name: Generate CycloneDX SBOM
-        if: env.SNYK_TOKEN != ''
+        if: env.SNYK_ENABLED == '1'
         run: cargo cyclonedx --format json --spec-version 1.5 --override-filename lazygocd.cdx
 
       - name: Scan SBOM with Snyk
-        if: env.SNYK_TOKEN != ''
+        if: env.SNYK_ENABLED == '1'
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         run: snyk sbom test --experimental --file=lazygocd.cdx.json
