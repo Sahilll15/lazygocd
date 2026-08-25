@@ -82,7 +82,7 @@
 
       <h2 id="dashboard">The whole fleet in one call</h2>
       <p>The pipeline tree, pause states, and latest-run statuses all come from a single request to GoCD's <code>/api/dashboard</code>. There's no N+1 walk over groups or pipelines, so the cost of a refresh doesn't grow with how much you have.</p>
-      <p>The client requests gzip, which matters more than it sounds. On a real GoCD 23.5.0 instance with many groups and 2,389 pipelines, the dashboard payload is 5.3&nbsp;MB uncompressed but only 165&nbsp;KB compressed, and the load dropped from ~20 seconds to 2&ndash;4 seconds. The request timeout is a generous 45 seconds regardless, for slower networks.</p>
+      <p>The client requests gzip, which matters more than it sounds. On a real GoCD 23.5.0 instance with thousands of pipelines, the dashboard payload is 5.3&nbsp;MB uncompressed but only 165&nbsp;KB compressed, and the load dropped from ~20 seconds to 2&ndash;4 seconds. The request timeout is a generous 45 seconds regardless, for slower networks.</p>
       <p>The tree starts fully collapsed, because a large org's groups expanded at once would be unusable. Press <kbd>/</kbd> to fuzzy-filter by name across every group, collapsed or not.</p>
 
       <h2 id="views">Personalized GoCD views</h2>

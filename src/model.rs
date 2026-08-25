@@ -2,8 +2,8 @@ use serde::{Deserialize, Serialize};
 
 /// `/api/dashboard` (Accept v4) is the primary data source: one call returns
 /// pipeline groups, membership, pause state, and latest-run status for every
-/// pipeline the user can see. Verified against a real ~2,400-pipeline/large
-/// GoCD 23.5.0 instance, where per-pipeline status polling would be infeasible.
+/// pipeline the user can see. Verified against a large GoCD 23.5.0 instance
+/// with thousands of pipelines, where per-pipeline polling would be infeasible.
 /// Also cached to disk (see `app::save_dashboard_cache`), hence `Serialize` here too.
 #[derive(Debug, Clone, Deserialize, Default)]
 pub struct DashboardResponse {

@@ -168,7 +168,7 @@ The dashboard cache lives at `~/.config/lazygocd/dashboard_cache.json` and favor
 
 ## How it stays fast
 
-- The whole dashboard (groups, pipelines, pause state, latest-run status) loads in **one gzip'd request** — measured at ~2s for a large / 2,389-pipeline production instance
+- The whole dashboard (groups, pipelines, pause state, latest-run status) loads in **one gzip'd request** — measured at ~2s on a large production instance with thousands of pipelines
 - The last successful load is cached to disk, so every launch after the first renders **immediately** while a refresh runs behind it
 - Opening a pipeline you've viewed before is instant (in-memory cache), and resting the cursor on a row for 300ms **prefetches** its history
 - Steady-state polls cost almost nothing: the dashboard revalidates with **ETag/304**, and console tailing fetches **only new lines** (`startLineNumber`)

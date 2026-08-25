@@ -58,10 +58,10 @@
   <section>
     <div class="wrap prose">
 
-      <p>I watch pipelines for a living, or close enough to it. GoCD's web dashboard is fine at a few dozen pipelines. It is not fine at 2,400, which is roughly where our instance sits. Every trigger, every log tail, every "did that deploy actually go out" check meant a page load. So I built <a href="https://github.com/Sahilll15/lazygocd">lazygocd</a>: the lazygit idea, applied to GoCD instead of git.</p>
+      <p>I watch pipelines for a living, or close enough to it. GoCD's web dashboard is fine at a few dozen pipelines. It is not fine at a few thousand. Every trigger, every log tail, every "did that deploy actually go out" check meant a page load. So I built <a href="https://github.com/Sahilll15/lazygocd">lazygocd</a>: the lazygit idea, applied to GoCD instead of git.</p>
 
       <h2>What the API actually looks like</h2>
-      <p>GoCD's docs describe the shape of the API. Reading real responses from a real 2,400-pipeline server told me the rest.</p>
+      <p>GoCD's docs describe the shape of the API. Reading real responses from a large production server told me the rest.</p>
       <p>The obvious approach, one status call per pipeline, doesn't scale: that's thousands of requests just to draw a dashboard. GoCD's <code>/api/dashboard</code> endpoint returns every group, every pipeline, and the latest run's status in one call. One request, one JSON blob, done. The versioned Accept header matters more than the docs suggest, too: <code>application/vnd.go.cd.v4+json</code> against that same endpoint returns the personalization envelope; drop a version and you get a different (often older, sometimes broken) response shape.</p>
       <p>Some of the more useful endpoints aren't in the public docs at all. GoCD's own web dashboard has personalized views, the tabs you build yourself to slice thousands of pipelines down to the ones you own. That's <code>/api/internal/pipeline_selection</code>, an "internal" endpoint with no version header, guarded by an ETag on writes:</p>
       <pre><code>GET  /api/internal/pipeline_selection      # your saved views + ETag

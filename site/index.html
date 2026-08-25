@@ -103,7 +103,7 @@
       "name": "Does it work with thousands of pipelines?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Yes. It loads the whole dashboard in a single API call rather than polling per pipeline, caches it to disk for instant startup, revalidates with ETags so unchanged polls cost nothing, and offers fuzzy filtering to find one pipeline among thousands. It is used against an instance with roughly 2,400 pipelines."
+        "text": "Yes. It loads the whole dashboard in a single API call rather than polling per pipeline, caches it to disk for instant startup, revalidates with ETags so unchanged polls cost nothing, and offers fuzzy filtering to find one pipeline among thousands. It is used daily against a large production instance."
       }
     },
     {
@@ -303,10 +303,10 @@
   <section>
     <div class="wrap">
       <h2>Measured on a real fleet</h2>
-      <p class="sec-lede">Verified against a GoCD 23.5.0 instance with 185 pipeline groups and 2,389 pipelines. One gzipped call to <code>/api/dashboard</code> loads the whole tree, pause states, and latest-run statuses.</p>
+      <p class="sec-lede">Verified against a large GoCD 23.5.0 production instance with thousands of pipelines. One gzipped call to <code>/api/dashboard</code> loads the whole tree, pause states, and latest-run statuses.</p>
       <div class="stats-strip">
         <div class="stat"><div class="num">5.3&nbsp;MB &rarr; 165&nbsp;KB</div><div class="lbl">dashboard payload with gzip</div></div>
-        <div class="stat"><div class="num">~20s &rarr; 2&ndash;4s</div><div class="lbl">cold load, 2,389 pipelines</div></div>
+        <div class="stat"><div class="num">~20s &rarr; 2&ndash;4s</div><div class="lbl">cold load, thousands of pipelines</div></div>
         <div class="stat"><div class="num">0 network calls</div><div class="lbl">to first paint, via the disk cache</div></div>
         <div class="stat"><div class="num">40&nbsp;ms</div><div class="lbl">input poll, so keys land instantly</div></div>
       </div>
@@ -340,7 +340,7 @@
 
       <article class="trouble t-cyan">
         <div class="symptom">Does it work with thousands of pipelines?</div>
-        <div class="fix"><p>Yes. It loads the whole dashboard in a single API call rather than polling per pipeline, caches it to disk for instant startup, revalidates with ETags so unchanged polls cost nothing, and offers fuzzy filtering to find one pipeline among thousands. It is used daily against an instance with roughly 2,400 pipelines.</p></div>
+        <div class="fix"><p>Yes. It loads the whole dashboard in a single API call rather than polling per pipeline, caches it to disk for instant startup, revalidates with ETags so unchanged polls cost nothing, and offers fuzzy filtering to find one pipeline among thousands. It is used daily against a large production instance.</p></div>
       </article>
 
       <article class="trouble t-cyan">
