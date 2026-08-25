@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.10.2 - 2026-08-25
+
+- No behaviour change. The source, tests, and documentation no longer carry
+  details of the private GoCD instance this was developed against: a test
+  fixture used a real pipeline name, and the docs quoted exact group and
+  pipeline counts. The measurements those numbers supported are unchanged
+  (5.3 MB dashboard payload down to 165 KB gzipped, ~20s cold load down to
+  2 to 4s, on GoCD 23.5.0).
+
 ## v0.10.1 - 2026-08-25
 
 - The Details pane scrolls. It rendered without a scroll offset, so a run with
