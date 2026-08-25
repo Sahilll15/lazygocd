@@ -218,14 +218,14 @@ fn draw_footer(f: &mut Frame, app: &App, area: Rect) {
     const GROUPS_HINTS: &[Hint] = &[
         ("j/k", "move", false),
         ("enter", "open", false),
+        ("1/2/3", "pane", false),
         ("/", "filter", false),
         ("t", "trigger", true),
-        ("v", "views", false),
         ("?", "keys", false),
     ];
     const HISTORY_HINTS: &[Hint] = &[
         ("j/k", "move", false),
-        ("tab", "jobs", false),
+        ("1/2/3", "pane", false),
         ("o", "commit", false),
         ("R", "rerun", true),
         ("X", "cancel", true),
@@ -234,7 +234,7 @@ fn draw_footer(f: &mut Frame, app: &App, area: Rect) {
     const DETAIL_HINTS: &[Hint] = &[
         ("j/k", "move", false),
         ("enter", "console", false),
-        ("esc", "back", false),
+        ("1/2/3", "pane", false),
         ("R", "rerun", true),
         ("X", "cancel", true),
         ("?", "keys", false),
@@ -804,6 +804,7 @@ fn draw_help(f: &mut Frame, area: Rect) {
         ("g/G", "top / bottom", false),
         ("ctrl-d/u", "half page", false),
         ("tab", "next pane", false),
+        ("1 2 3", "tree/history/jobs", false),
         ("enter", "open", false),
         ("h/esc", "collapse / back", false),
         ("/", "filter pipelines", false),

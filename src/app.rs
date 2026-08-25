@@ -1091,6 +1091,15 @@ impl App {
         }
     }
 
+    /// Detail rows are derived from the selected run, so they have to be rebuilt
+    /// whenever that pane gains focus rather than only on Tab.
+    fn set_focus(&mut self, focus: Focus) {
+        self.focus = focus;
+        if self.focus == Focus::Detail {
+            self.rebuild_detail_rows();
+        }
+    }
+
     pub fn handle_key(&mut self, key: KeyEvent) {
         // Global escape hatch: must work even while a text input is capturing chars.
         if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
@@ -1119,15 +1128,17 @@ impl App {
                 self.filter_active = true;
             }
             KeyCode::Tab => {
-                self.focus = match self.focus {
+                self.set_focus(match self.focus {
                     Focus::Groups => Focus::History,
                     Focus::History => Focus::Detail,
                     Focus::Detail => Focus::Groups,
-                };
-                if self.focus == Focus::Detail {
-                    self.rebuild_detail_rows();
-                }
+                });
             }
+            // Same digits the job view uses for its tabs, so one mental model
+            // covers both: a number jumps straight to a pane.
+            KeyCode::Char('1') => self.set_focus(Focus::Groups),
+            KeyCode::Char('2') => self.set_focus(Focus::History),
+            KeyCode::Char('3') => self.set_focus(Focus::Detail),
             KeyCode::Char('r') => self.refresh(),
             KeyCode::Char('t') => self.request_action(PendingAction::Trigger),
             KeyCode::Char('T') => self.request_trigger_with_vars(),

@@ -109,6 +109,7 @@ Env vars override the config for scripting: `GOCD_URL`, `GOCD_USERNAME`, `GOCD_P
 | `l`/`enter`/`→` | expand group / open pipeline / open a job (console, artifacts, materials tabs) |
 | `h`/`←` | collapse group |
 | `tab` | cycle focus: groups → history → details |
+| `1` `2` `3` | jump straight to the groups, history, or details pane |
 | `esc` | back: details → history → groups; in groups, clear the filter |
 | `t` | trigger a new run (confirm) |
 | `T` | trigger with environment variables — type `NAME=VALUE` entries, an empty entry finishes |
