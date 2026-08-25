@@ -601,6 +601,8 @@ fn draw_detail(f: &mut Frame, app: &App, area: Rect) {
     lines.push(Line::from(""));
 
     let selected_row = app.detail_rows.get(app.detail_selected).copied();
+    // Where the selected row lands in `lines`, so the pane can scroll to it.
+    let mut selected_line: Option<usize> = None;
     for (si, stage) in inst.stages.iter().enumerate() {
         let status = stage.status.as_deref().unwrap_or("Unknown");
         let stage_selected =
@@ -631,6 +633,9 @@ fn draw_detail(f: &mut Frame, app: &App, area: Rect) {
                 Style::default().fg(theme::MUTED),
             ));
         }
+        if stage_selected {
+            selected_line = Some(lines.len());
+        }
         lines.push(Line::from(stage_line));
         for (ji, job) in stage.jobs.iter().enumerate() {
             let job_selected =
@@ -650,6 +655,9 @@ fn draw_detail(f: &mut Frame, app: &App, area: Rect) {
             } else {
                 ("    ", Style::default())
             };
+            if job_selected {
+                selected_line = Some(lines.len());
+            }
             lines.push(Line::from(vec![
                 Span::raw(prefix),
                 Span::styled(job.name.clone(), name_style),
@@ -715,10 +723,22 @@ fn draw_detail(f: &mut Frame, app: &App, area: Rect) {
         }
     }
 
+    // A run with many stages and jobs overflows the pane. Scroll to keep the
+    // selected row on screen: without this the cursor moved invisibly and
+    // 'enter' opened a log you could not see you had selected.
+    let inner_height = area.height.saturating_sub(2) as usize;
+    let offset = match selected_line {
+        Some(line) if inner_height > 0 && line >= inner_height => {
+            (line - inner_height + 1).min(lines.len())
+        }
+        _ => 0,
+    };
+
     f.render_widget(
         Paragraph::new(lines)
             .block(block)
-            .wrap(Wrap { trim: false }),
+            .wrap(Wrap { trim: false })
+            .scroll((offset as u16, 0)),
         area,
     );
 }

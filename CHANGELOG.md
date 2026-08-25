@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.10.1 - 2026-08-25
+
+- The Details pane scrolls. It rendered without a scroll offset, so a run with
+  several stages and jobs had everything past the pane height clipped and
+  unreachable: the selection cursor moved off-screen invisibly and `enter`
+  opened a log you could not see you had picked. The pane now follows the
+  selected stage or job in both directions.
+
 ## v0.10.0 - 2026-08-22
 
 - The Artifacts tab is a real tree now. Every folder was permanently expanded,
