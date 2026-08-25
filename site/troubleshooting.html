@@ -99,7 +99,8 @@
       <article class="trouble t-red">
         <div class="symptom"><span class="bang">! </span>certificate verify failed &nbsp;<span class="c-muted">(self-signed certificate)</span></div>
         <div class="fix">
-          <p>Your GoCD server uses a self-signed or internal-CA certificate. Press <kbd>A</kbd> and choose <strong>Yes</strong> at the "Skip TLS certificate verification?" step of the connect form, or launch with <code>GOCD_INSECURE=1</code>.</p>
+          <p>Your GoCD server uses a self-signed or internal-CA certificate that your machine does not trust. The fix worth doing first is adding that CA to your operating system's trust store, which keeps verification on and fixes every other tool on the machine at the same time. Many organisations run TLS inspection and already ship this root on managed laptops, so check there before anything else.</p>
+          <p>If you cannot do that, set <code>insecure_skip_verify = true</code> in <code>~/.config/lazygocd/config.toml</code>, or launch with <code>GOCD_INSECURE=1</code>. There is no prompt for this in the connect form: verification is always on unless you edit the config yourself.</p>
           <div class="callout warn" style="margin-bottom:0">
             <span class="co-label">warning</span>
             Skipping verification means the client can't detect a man-in-the-middle, and your token or password is sent on every request. Anything sitting on the path can read the credential. Only use it for servers you trust on networks you trust; the form defaults to <strong>No</strong> for a reason.
@@ -136,7 +137,7 @@
             <table class="tbl">
               <thead><tr><th>Path</th><th>Contents</th><th>Safe to delete?</th></tr></thead>
               <tbody>
-                <tr><td><code>~/.config/lazygocd/config.toml</code></td><td>Server URL, credential, TLS choice, poll interval, optional GitHub token (mode <code>0600</code>)</td><td>Yes; the connect form reappears on next launch</td></tr>
+                <tr><td><code>~/.config/lazygocd/config.toml</code></td><td>Server URL, credential, TLS setting, poll interval, optional GitHub token (mode <code>0600</code>)</td><td>Yes; the connect form reappears on next launch</td></tr>
                 <tr><td><code>~/.config/lazygocd/dashboard_cache.json</code></td><td>Last successful dashboard load</td><td>Yes; the next launch just waits for the network once</td></tr>
                 <tr><td><code>~/.config/lazygocd/favorites.json</code></td><td>Starred pipeline names</td><td>Yes; you lose your stars</td></tr>
               </tbody>

@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.10.4 - 2026-08-25
+
+- The connect form no longer asks about TLS. Certificates are always verified,
+  and the form ends at the credential. The old question defaulted to the safe
+  answer but put the decision in front of people at the one moment they had no
+  information to make it with, and its only hint was "only for self-signed
+  certs", which never said what saying yes costs.
+- A rejected certificate now says what to do about it instead of echoing
+  reqwest's wording: add the server's CA to your trust store, or set
+  `insecure_skip_verify = true` in `config.toml`. The message row grows to two
+  lines when an error is too long for the terminal width, so the half naming the
+  setting is no longer the half that gets cut off.
+- `insecure_skip_verify` is now config-only and is never rewritten by
+  reconnecting, so a value you set by hand survives pressing `A`.
+
 ## v0.10.3 - 2026-08-25
 
 Security hardening. No feature or keybinding changed.

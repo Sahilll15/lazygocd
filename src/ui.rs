@@ -34,9 +34,15 @@ mod theme {
 
 pub fn draw(f: &mut Frame, app: &mut App) {
     let area = f.area();
+    // A rejected certificate names both fixes and runs long. Without a second row
+    // on a narrow terminal, the half naming the setting is the half that is cut.
+    let message_rows = match &app.error_line {
+        Some(e) if e.chars().count() as u16 > area.width.saturating_sub(2) => 2,
+        _ => 1,
+    };
     let chunks = Layout::vertical([
         Constraint::Length(1),
-        Constraint::Length(1),
+        Constraint::Length(message_rows),
         Constraint::Min(5),
         Constraint::Length(1),
     ])
@@ -170,7 +176,7 @@ fn draw_statusbar(f: &mut Frame, app: &App, area: Rect) {
     } else {
         Line::from("")
     };
-    f.render_widget(Paragraph::new(line), area);
+    f.render_widget(Paragraph::new(line).wrap(Wrap { trim: true }), area);
 }
 
 /// key, label, and whether the key changes server state (rendered red so a
@@ -1460,7 +1466,7 @@ fn draw_reauth(f: &mut Frame, area: Rect, form: &ReauthForm) {
     }
     if matches!(
         form.step,
-        ReauthStep::Username | ReauthStep::Secret | ReauthStep::Insecure
+        ReauthStep::Username | ReauthStep::Secret
     ) {
         let method = if form.use_token {
             "Access token"
@@ -1470,7 +1476,7 @@ fn draw_reauth(f: &mut Frame, area: Rect, form: &ReauthForm) {
         lines.push(summary_line("Method", method));
         wrote_summary = true;
     }
-    if matches!(form.step, ReauthStep::Secret | ReauthStep::Insecure)
+    if form.step == ReauthStep::Secret
         && !form.use_token
         && !form.username.is_empty()
     {
@@ -1517,16 +1523,6 @@ fn draw_reauth(f: &mut Frame, area: Rect, form: &ReauthForm) {
             }));
             lines.push(Line::from(""));
             lines.push(input_line(&form.input, true));
-        }
-        ReauthStep::Insecure => {
-            lines.push(field_label("Skip TLS certificate verification?"));
-            lines.push(Line::from(Span::styled(
-                "only for self-signed certs",
-                Style::default().fg(theme::MUTED),
-            )));
-            lines.push(Line::from(""));
-            lines.push(choice_line("No (recommended)", form.choice_index == 0));
-            lines.push(choice_line("Yes", form.choice_index == 1));
         }
     }
 

@@ -95,12 +95,8 @@
             <p>The token or password, typed masked. If your server has no auth at all, leave the username blank.</p>
           </li>
           <li>
-            <h3>TLS choice</h3>
-            <p>Whether to skip TLS certificate verification. Say no unless the server uses a self-signed certificate you trust.</p>
-          </li>
-          <li>
             <h3>Done</h3>
-            <p>On confirm it saves the config and loads straight into the dashboard. Press <kbd>A</kbd> any time later to reopen the same form as "Reconnect to GoCD", for example after a token expires.</p>
+            <p>On confirm it saves the config and loads straight into the dashboard. Certificates are always verified; there is no prompt to turn that off. Press <kbd>A</kbd> any time later to reopen the same form as "Reconnect to GoCD", for example after a token expires.</p>
           </li>
         </ol>
 
@@ -158,7 +154,7 @@
           <table class="tbl">
             <thead><tr><th>File</th><th>What it holds</th></tr></thead>
             <tbody>
-              <tr><td><code>config.toml</code></td><td>Server URL, credentials, TLS choice, poll interval, optional GitHub token. Mode <code>0600</code>.</td></tr>
+              <tr><td><code>config.toml</code></td><td>Server URL, credentials, TLS setting, poll interval, optional GitHub token. Mode <code>0600</code>.</td></tr>
               <tr><td><code>dashboard_cache.json</code></td><td>The last successful dashboard load, so the next launch paints instantly. Mode <code>0600</code>; it lists every pipeline and group name. Safe to delete.</td></tr>
               <tr><td><code>favorites.json</code></td><td>Names of starred pipelines, pinned to the top of the tree. Mode <code>0600</code>.</td></tr>
             </tbody>

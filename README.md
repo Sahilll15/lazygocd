@@ -93,7 +93,7 @@ lazygocd completions zsh > ~/.zfunc/_lazygocd
 lazygocd man > /usr/local/share/man/man1/lazygocd.1
 ```
 
-Run `lazygocd`. On first launch it walks you through connecting inside the TUI itself: server URL (e.g. `https://gocd.example.com/go`), then username/password or a personal access token (recommended), then a TLS choice. The config is saved to `~/.config/lazygocd/config.toml` and you land straight in the dashboard. That directory is created mode `0700` and every file in it is written mode `0600`, since it holds a plaintext credential plus a cache of every pipeline name on your server. Press `A` anytime to reconnect or switch servers.
+Run `lazygocd`. On first launch it walks you through connecting inside the TUI itself: server URL (e.g. `https://gocd.example.com/go`), then username/password or a personal access token (recommended). Certificates are always verified and there is no prompt to skip that; if your server uses an internal CA, add it to your OS trust store, or set `insecure_skip_verify = true` in the config yourself. The config is saved to `~/.config/lazygocd/config.toml` and you land straight in the dashboard. That directory is created mode `0700` and every file in it is written mode `0600`, since it holds a plaintext credential plus a cache of every pipeline name on your server. Press `A` anytime to reconnect or switch servers.
 
 Env vars override the config for scripting: `GOCD_URL`, `GOCD_USERNAME`, `GOCD_PASSWORD`, `GOCD_TOKEN`, `GOCD_INSECURE=1`, `GITHUB_TOKEN`.
 

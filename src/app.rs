@@ -145,13 +145,12 @@ pub enum ReauthStep {
     ChooseAuthMethod,
     Username,
     Secret,
-    Insecure,
 }
 
 impl ReauthStep {
     /// Steps rendered as a selectable list (arrow-key choice) rather than free text.
     pub fn is_choice(self) -> bool {
-        matches!(self, ReauthStep::ChooseAuthMethod | ReauthStep::Insecure)
+        matches!(self, ReauthStep::ChooseAuthMethod)
     }
 }
 
@@ -163,7 +162,6 @@ pub struct ReauthForm {
     pub server_url: String,
     pub username: String,
     pub secret: String,
-    pub insecure: bool,
     pub choice_index: usize,
     pub input: String,
 }
@@ -177,7 +175,6 @@ impl ReauthForm {
             server_url: String::new(),
             username: String::new(),
             secret: String::new(),
-            insecure: false,
             choice_index: 0,
             input: current_server_url.to_string(),
         }
@@ -902,7 +899,7 @@ impl App {
             }
             ApiEvent::Dashboard(_, Err(e)) => {
                 self.loading_groups = false;
-                self.error_line = Some(format!("Failed to load dashboard: {e}{}", auth_hint(&e)));
+                self.error_line = Some(explain("Failed to load dashboard: ", &e));
             }
             ApiEvent::History(name, Ok((instances, next))) => {
                 let cached = self.history_cache.remove(&name).unwrap_or_default();
@@ -941,10 +938,8 @@ impl App {
                 // hover-prefetch of something merely pointed at is not news.
                 if self.selected_pipeline.as_deref() == Some(name.as_str()) {
                     self.history_loading = false;
-                    self.error_line = Some(format!(
-                        "Failed to load history for {name}: {e}{}",
-                        auth_hint(&e)
-                    ));
+                    self.error_line =
+                        Some(explain(&format!("Failed to load history for {name}: "), &e));
                 }
             }
             ApiEvent::HistoryMore {
@@ -992,9 +987,9 @@ impl App {
                     }
                     Err(e) => {
                         if self.selected_pipeline.as_deref() == Some(name.as_str()) {
-                            self.error_line = Some(format!(
-                                "Failed to load more history for {name}: {e}{}",
-                                auth_hint(&e)
+                            self.error_line = Some(explain(
+                                &format!("Failed to load more history for {name}: "),
+                                &e,
                             ));
                         }
                     }
@@ -1029,11 +1024,8 @@ impl App {
                 }
             }
             ApiEvent::ActionDone(action, Err(e)) => {
-                self.error_line = Some(format!(
-                    "Action on {} failed: {e}{}",
-                    action.name(),
-                    auth_hint(&e)
-                ));
+                self.error_line =
+                    Some(explain(&format!("Action on {} failed: ", action.name()), &e));
             }
             ApiEvent::GithubLatest(name, key, result) => {
                 if self.selected_pipeline.as_deref() == Some(name.as_str()) {
@@ -1616,12 +1608,7 @@ impl App {
                             ReauthStep::Username
                         };
                     }
-                    ReauthStep::Insecure => {
-                        form.insecure = form.choice_index == 1;
-                        self.apply_reauth(form);
-                        return;
-                    }
-                    _ => unreachable!("only ChooseAuthMethod/Insecure are choice steps"),
+                    _ => unreachable!("ChooseAuthMethod is the only choice step"),
                 },
                 _ => {}
             }
@@ -1650,17 +1637,17 @@ impl App {
                     form.username = form.input.trim().to_string();
                     form.input.clear();
                     form.choice_index = 0;
-                    form.step = if form.username.is_empty() {
-                        ReauthStep::Insecure
-                    } else {
-                        ReauthStep::Secret
-                    };
+                    if form.username.is_empty() {
+                        self.apply_reauth(form);
+                        return;
+                    }
+                    form.step = ReauthStep::Secret;
                 }
                 ReauthStep::Secret => {
                     form.secret = form.input.clone();
                     form.input.clear();
-                    form.choice_index = 0;
-                    form.step = ReauthStep::Insecure;
+                    self.apply_reauth(form);
+                    return;
                 }
                 _ => {}
             },
@@ -1672,7 +1659,6 @@ impl App {
     fn apply_reauth(&mut self, form: ReauthForm) {
         let mut cfg = self.cfg.clone();
         cfg.server_url = form.server_url;
-        cfg.insecure_skip_verify = form.insecure;
         if form.use_token {
             cfg.auth_token = (!form.secret.is_empty()).then_some(form.secret);
             cfg.username = None;
@@ -2849,6 +2835,30 @@ fn open_url(url: &str) -> std::io::Result<()> {
         .map(|_| ())
 }
 
+/// A rejected certificate is a dead end with one specific fix, so it replaces
+/// reqwest's wording rather than having a hint appended to it.
+fn cert_hint(e: &str) -> Option<&'static str> {
+    let lower = e.to_ascii_lowercase();
+    let is_cert = lower.contains("certificate")
+        || lower.contains("unknownissuer")
+        || lower.contains("certnotvalid")
+        || lower.contains("self-signed")
+        || lower.contains("self signed");
+    is_cert.then_some(
+        "TLS certificate rejected. Add the server's CA to your trust store, \
+         or set insecure_skip_verify = true in config.toml",
+    )
+}
+
+/// The message shown for a failed request: a purpose-written line when the cause
+/// is recognisable, otherwise the raw error plus a short pointer.
+fn explain(prefix: &str, e: &str) -> String {
+    match cert_hint(e) {
+        Some(msg) => msg.to_string(),
+        None => format!("{prefix}{e}{}", auth_hint(e)),
+    }
+}
+
 fn auth_hint(e: &str) -> &'static str {
     if e.contains("401") {
         "  (press A to reconnect)"
@@ -2880,6 +2890,36 @@ fn format_age(saved_at_ms: i64) -> String {
 
 #[cfg(test)]
 mod tests {
+    // The TLS choice is no longer prompted, so a rejected certificate is the only
+    // place a user learns the escape hatch exists. It has to name the setting.
+    #[test]
+    fn cert_failures_name_the_config_setting() {
+        for e in [
+            "error sending request: invalid peer certificate: UnknownIssuer",
+            "certificate verify failed",
+            "self-signed certificate in certificate chain",
+            "invalid peer certificate: CertNotValidForName",
+        ] {
+            let out = super::explain("Failed to load dashboard: ", e);
+            assert!(out.contains("insecure_skip_verify"), "no setting named: {out}");
+            assert!(out.contains("CA"), "no mention of the real fix: {out}");
+            assert!(
+                !out.contains("Failed to load dashboard"),
+                "prefix should be replaced, not appended: {out}"
+            );
+            // The status bar is one line, so this has to stay terminal-friendly.
+            assert!(out.chars().count() <= 120, "{} chars: {out}", out.chars().count());
+        }
+    }
+
+    #[test]
+    fn other_failures_keep_the_prefix_and_the_raw_error() {
+        let out = super::explain("Failed to load dashboard: ", "GoCD returned 401 Unauthorized");
+        assert!(out.starts_with("Failed to load dashboard: "), "{out}");
+        assert!(out.contains("401"), "{out}");
+        assert!(!out.contains("insecure_skip_verify"), "{out}");
+    }
+
     // Windows opens URLs through `cmd /C start`, which re-parses metacharacters
     // that std's argument quoting leaves untouched.
     #[test]
