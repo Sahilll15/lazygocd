@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.10.5 - 2026-08-25
+
+- `1`, `2` and `3` jump straight to the groups, history and details panes.
+  `tab` cycled, so reaching details from groups took two presses with no way
+  back by one. The job view already used those digits for its Console,
+  Artifacts and Materials tabs, and it is dispatched as a modal that returns
+  before the main key handler, so the same digits were free at the top level
+  and now mean the same kind of thing in both places. `tab` still cycles.
+
 ## v0.10.4 - 2026-08-25
 
 - The connect form no longer asks about TLS. Certificates are always verified,
