@@ -143,7 +143,7 @@ export EDITOR=code              # VS Code, returns to the TUI immediately
 | `/` | fuzzy-filter pipelines |
 | `r` | refresh |
 | `A` | connect / reconnect GoCD |
-| `@` | set a GitHub token (optional: `gh auth token` is picked up automatically if the GitHub CLI is signed in) |
+| `@` | set a GitHub token (optional: `gh auth token` is picked up automatically if the GitHub CLI is signed in, and is retried if the configured token is rejected) |
 | `?` | help |
 | `q` / `ctrl-c` | quit |
 

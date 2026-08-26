@@ -109,9 +109,12 @@
       </article>
 
       <article class="trouble t-yellow">
-        <div class="symptom"><span class="bang">&#9888; </span>can't check &nbsp;<span class="c-muted">(GitHub commit comparison, private repo)</span></div>
+        <div class="symptom"><span class="bang">&#9888; </span>the GitHub check fails &nbsp;<span class="c-muted">(deployed-commit comparison)</span></div>
         <div class="fix">
-          <p>The deployed-commit check works unauthenticated for public repos (rate-limited), but a private repo needs credentials. Press <kbd>@</kbd> and paste a GitHub personal access token with read access to the repo, or export <code>GITHUB_TOKEN</code> before launching. Until then it shows this soft hint rather than an error.</p>
+          <p>The detail pane names the reason, and the message row carries the full text. The check works unauthenticated for public repos (rate-limited); a private repo needs credentials, so press <kbd>@</kbd> and paste a token with read access, or export <code>GITHUB_TOKEN</code> before launching.</p>
+          <p><strong>needs SSO authorization.</strong> The organisation enforces SAML SSO and this token has no grant for it. A classic personal access token you created by hand is not authorized until you go to Settings &gt; Developer settings &gt; Personal access tokens &gt; Configure SSO and authorize that org. The GitHub CLI's own token usually already carries the grant, because it was minted through a browser login that passed the SAML flow, so clearing <code>github_token</code> from the config is often the faster fix.</p>
+          <p><strong>token invalid.</strong> A 401. The token is revoked, mistyped, or expired.</p>
+          <p class="small">Since v0.10.6 a token rejected with 401 or 403 is retried once against <code>gh auth token</code>, and the status line says so when that is what worked. So a stale value in the config no longer shadows a working GitHub CLI session.</p>
           <p class="small">No comparison shown at all? Since v0.7.0 a deploy pipeline triggered by an upstream build is traced through its pipeline dependency, and the commit is shown with a <code>via &lt;pipeline&gt; #&lt;counter&gt;</code> line. If nothing appears, the run has neither a Git material nor a pipeline dependency leading to one within four hops.</p>
         </div>
       </article>

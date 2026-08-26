@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.10.6 - 2026-08-26
+
+- A GitHub token rejected with 401 or 403 is retried once against
+  `gh auth token`, and the status line says when that is what worked. A stale
+  or SSO-blocked value in `github_token` used to shadow a working GitHub CLI
+  session forever, because the token was chosen once at startup and never
+  reconsidered after a failure.
+- The failure reason is shown instead of being discarded. The detail pane used
+  to print `can't check (connect GitHub with '@')` for every failure, which is
+  wrong advice when a token is present and merely rejected. It now says which
+  of `needs SSO authorization`, `token invalid`, `repo or branch not found` or
+  `check failed` applies, with the full message in the message row.
+- A SAML rejection names the organisation and both fixes: authorize the token
+  for that org under Configure SSO, or clear `github_token` and let the gh CLI
+  token be used. A classic PAT created by hand carries no SSO grant, while the
+  gh CLI's OAuth token usually does.
+
 ## v0.10.5 - 2026-08-25
 
 - `1`, `2` and `3` jump straight to the groups, history and details panes.

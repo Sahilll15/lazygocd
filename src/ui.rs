@@ -699,9 +699,12 @@ fn draw_detail(f: &mut Frame, app: &App, area: Rect) {
                     format!("\u{26a0} not latest (latest {})", short_sha(latest)),
                     Style::default().fg(theme::WARNING),
                 ),
-                GithubState::Failed(_) => Span::styled(
-                    "can't check (connect GitHub with '@')",
-                    Style::default().fg(theme::MUTED),
+                // Was a flat "connect GitHub with '@'", which is wrong advice when
+                // the token is present and merely rejected. The full reason is in
+                // the message row; this is the short label that fits here.
+                GithubState::Failed(why) => Span::styled(
+                    format!("\u{2717} {}", github_failure_label(why)),
+                    Style::default().fg(theme::WARNING),
                 ),
             };
             lines.push(Line::from(vec![
@@ -751,6 +754,20 @@ fn draw_detail(f: &mut Frame, app: &App, area: Rect) {
 
 fn label(text: &str) -> Span<'static> {
     Span::styled(text.to_string(), Style::default().fg(theme::MUTED))
+}
+
+fn github_failure_label(why: &str) -> &'static str {
+    if why.contains("SSO") {
+        "needs SSO authorization"
+    } else if why.contains("401") {
+        "token invalid"
+    } else if why.contains("404") {
+        "repo or branch not found"
+    } else if why.contains("no token") || why.contains("rate limit") {
+        "no token (press @ to connect)"
+    } else {
+        "check failed"
+    }
 }
 
 fn short_sha(sha: &str) -> String {

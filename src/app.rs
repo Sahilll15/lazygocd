@@ -269,7 +269,7 @@ pub enum ApiEvent {
     },
     ActionDone(PendingAction, Result<String, String>),
     /// (pipeline, GitRef::key() of the material this check was for, result).
-    GithubLatest(String, String, Result<String, String>),
+    GithubLatest(String, String, Result<crate::github::CommitCheck, String>),
     /// usize = the 0-based line this fetch started from (0 = full log).
     ConsoleLog(JobRef, usize, Result<String, String>),
     Artifacts(JobRef, Result<Vec<ArtifactNode>, String>),
@@ -1030,8 +1030,18 @@ impl App {
             ApiEvent::GithubLatest(name, key, result) => {
                 if self.selected_pipeline.as_deref() == Some(name.as_str()) {
                     let state = match result {
-                        Ok(sha) => GithubState::Found(sha),
-                        Err(e) => GithubState::Failed(e),
+                        Ok(check) => {
+                            if check.fell_back {
+                                self.status_line = "GitHub: configured github_token was rejected, used your gh CLI token instead".to_string();
+                            }
+                            GithubState::Found(check.sha)
+                        }
+                        Err(e) => {
+                            // The detail pane only has room for a short label, so the
+                            // reason goes in the message row, which wraps when long.
+                            self.error_line = Some(e.clone());
+                            GithubState::Failed(e)
+                        }
                     };
                     if self
                         .github_checks
