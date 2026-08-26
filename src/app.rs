@@ -2980,6 +2980,43 @@ mod tests {
         assert_eq!(super::base64(b"foobar"), "Zm9vYmFy");
     }
 
+    // ^g is a filter behaviour change, so the property worth pinning is that
+    // toggling it OFF leaves the old matching exactly as it was.
+    #[test]
+    fn group_hit_only_widens_the_filter_when_enabled() {
+        let group = "frontend";
+        let pipelines = ["web-app-build", "design-system-publish"];
+        let filter = "frontend";
+
+        for search_groups in [false, true] {
+            let group_hit = search_groups
+                && !filter.is_empty()
+                && super::fuzzy_match(group, filter).is_some();
+            let kept: Vec<&str> = pipelines
+                .iter()
+                .copied()
+                .filter(|name| {
+                    filter.is_empty() || group_hit || super::fuzzy_match(name, filter).is_some()
+                })
+                .collect();
+            if search_groups {
+                assert_eq!(kept, pipelines, "a group hit must keep the whole group");
+            } else {
+                assert!(kept.is_empty(), "off must match nothing here, as before: {kept:?}");
+            }
+        }
+    }
+
+    // A group name that does not match must not sweep its pipelines in even
+    // with the toggle on, or the filter becomes useless.
+    #[test]
+    fn group_hit_requires_the_group_name_to_match() {
+        let filter = String::from("zzz");
+        let group_hit =
+            !filter.is_empty() && super::fuzzy_match("frontend", &filter).is_some();
+        assert!(!group_hit);
+    }
+
     use super::fuzzy_match;
 
     #[test]

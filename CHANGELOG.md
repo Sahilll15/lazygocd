@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.10.7 - 2026-08-26
+
+- `ctrl-g` folds pipeline group names into the filter, contributed by
+  @AdityaShah7867 in #4. The tree starts collapsed because a large org has
+  thousands of pipelines, so `/` is the way in, but it only ever matched
+  pipeline names: a group whose name matched exactly was still dropped unless
+  one of its pipelines happened to match too. A group-name hit now keeps the
+  whole group, so searching a group name lists everything under it. Off by
+  default and byte-identical to the old filter until you ask for it, and it
+  works whether the filter box is open or already committed.
+- The header keeps the active filter after the box closes, which previously
+  left no on-screen trace of what was filtering the tree.
+
 ## v0.10.6 - 2026-08-26
 
 - A GitHub token rejected with 401 or 403 is retried once against

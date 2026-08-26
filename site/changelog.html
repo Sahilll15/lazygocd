@@ -85,6 +85,23 @@
           <article class="release-item">
             <div class="release-meta">
               <span class="release-dot" aria-hidden="true"></span>
+              <span class="release-tag">v0.10.7</span>
+              <time datetime="2026-08-26">2026-08-26</time>
+            </div>
+            <div class="release-body">
+              <h2>Filter by group name</h2>
+              <ul>
+                <li><kbd>ctrl</kbd>+<kbd>g</kbd> folds pipeline group names into the filter. The tree starts collapsed because a large org has thousands of pipelines, so <kbd>/</kbd> is the way in, but it only ever matched pipeline names. A group whose name matched exactly was still dropped unless one of its pipelines happened to match too. A group-name hit now keeps the whole group.</li>
+                <li>Off by default, and identical to the old filter until you ask for it. Works whether the filter box is open or already committed, and the box title carries the state.</li>
+                <li>The header now keeps the active filter after the box closes, which previously left no on-screen trace of what was filtering the tree.</li>
+                <li>Contributed by <a href="https://github.com/AdityaShah7867">@AdityaShah7867</a> in <a href="https://github.com/Sahilll15/lazygocd/pull/4">#4</a>.</li>
+              </ul>
+            </div>
+          </article>
+
+          <article class="release-item">
+            <div class="release-meta">
+              <span class="release-dot" aria-hidden="true"></span>
               <span class="release-tag">v0.10.6</span>
               <time datetime="2026-08-26">2026-08-26</time>
             </div>

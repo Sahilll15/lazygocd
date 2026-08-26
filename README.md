@@ -110,6 +110,7 @@ Env vars override the config for scripting: `GOCD_URL`, `GOCD_USERNAME`, `GOCD_P
 | `h`/`←` | collapse group |
 | `tab` | cycle focus: groups → history → details |
 | `1` `2` `3` | jump straight to the groups, history, or details pane |
+| `ctrl-g` | fold group names into the filter; a group hit keeps the whole group (off by default) |
 | `esc` | back: details → history → groups; in groups, clear the filter |
 | `t` | trigger a new run (confirm) |
 | `T` | trigger with environment variables — type `NAME=VALUE` entries, an empty entry finishes |

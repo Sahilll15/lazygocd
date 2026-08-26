@@ -231,7 +231,7 @@ fn draw_footer(f: &mut Frame, app: &App, area: Rect) {
         ("j/k", "move", false),
         ("enter", "open", false),
         ("1/2/3", "pane", false),
-        ("/", "filter", false),
+        ("//^g", "filter/+groups", false),
         ("t", "trigger", true),
         ("?", "keys", false),
     ];
