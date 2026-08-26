@@ -305,6 +305,7 @@ pub struct App {
 
     pub filter: String,
     pub filter_active: bool,
+    pub search_groups: bool,
 
     pub rows: Vec<Row>,
     pub selected: usize,
@@ -516,6 +517,7 @@ impl App {
             favorites_expanded: true,
             filter: String::new(),
             filter_active: false,
+            search_groups: false,
             rows: Vec::new(),
             selected: 0,
             focus: Focus::Groups,
@@ -1136,6 +1138,10 @@ impl App {
             KeyCode::Char('?') => self.modal = Some(Modal::Help),
             KeyCode::Char('/') => {
                 self.filter_active = true;
+            }
+            KeyCode::Char('g') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.search_groups = !self.search_groups;
+                self.rebuild_rows();
             }
             KeyCode::Tab => {
                 self.set_focus(match self.focus {
@@ -1800,6 +1806,10 @@ impl App {
             }
             KeyCode::Backspace => {
                 self.filter.pop();
+                self.rebuild_rows();
+            }
+            KeyCode::Char('g') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.search_groups = !self.search_groups;
                 self.rebuild_rows();
             }
             KeyCode::Char(c) => {
@@ -2671,11 +2681,16 @@ impl App {
         }
 
         for (gi, group) in self.groups.iter().enumerate() {
+            let group_hit = self.search_groups
+                && !filter.is_empty()
+                && fuzzy_match(&group.name, &filter).is_some();
             let matching: Vec<usize> = group
                 .pipelines
                 .iter()
                 .enumerate()
-                .filter(|(_, name)| filter.is_empty() || fuzzy_match(name, &filter).is_some())
+                .filter(|(_, name)| {
+                    filter.is_empty() || group_hit || fuzzy_match(name, &filter).is_some()
+                })
                 .map(|(pi, _)| pi)
                 .collect();
 
