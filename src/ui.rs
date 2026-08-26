@@ -138,6 +138,18 @@ fn draw_header(f: &mut Frame, app: &App, area: Rect) {
         }
     }
 
+    if !app.filter.is_empty() {
+        spans.push(Span::raw("   "));
+        spans.push(Span::styled(
+            format!("/{}", app.filter),
+            Style::default().fg(theme::ACCENT).add_modifier(Modifier::BOLD),
+        ));
+        spans.push(Span::styled(
+            if app.search_groups { " +groups" } else { "" },
+            Style::default().fg(theme::MUTED),
+        ));
+    }
+
     if let Some(view) = app.active_view.and_then(|i| app.views.get(i)) {
         spans.push(Span::raw("   "));
         spans.push(Span::styled(
@@ -806,7 +818,8 @@ fn draw_filter_box(f: &mut Frame, app: &App, area: Rect) {
         height: 3,
     };
     f.render_widget(Clear, rect);
-    let block = styled_block("Filter", theme::ACCENT);
+    let scope = if app.search_groups { "on" } else { "off" };
+    let block = styled_block(format!("Filter  ^g groups:{scope}"), theme::ACCENT);
     f.render_widget(
         Paragraph::new(format!("/{}", app.filter)).block(block),
         rect,
@@ -825,6 +838,7 @@ fn draw_help(f: &mut Frame, area: Rect) {
         ("enter", "open", false),
         ("h/esc", "collapse / back", false),
         ("/", "filter pipelines", false),
+        ("^g", "incl. group names", false),
     ];
     const JOB: &[Hint] = &[
         ("1 2 3", "console/art/mat", false),
