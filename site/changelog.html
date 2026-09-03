@@ -85,6 +85,23 @@
           <article class="release-item">
             <div class="release-meta">
               <span class="release-dot" aria-hidden="true"></span>
+              <span class="release-tag">v0.10.8</span>
+              <time datetime="2026-09-03">2026-09-03</time>
+            </div>
+            <div class="release-body">
+              <h2>Open the selection in GoCD</h2>
+              <ul>
+                <li><kbd>O</kbd> opens whatever is selected in the GoCD web UI, so a run you just triggered is one keystroke from the page you would otherwise have clicked four levels deep to reach.</li>
+                <li>The target narrows with focus. A pipeline in the tree opens its activity page, a run in the history pane opens its value stream map, and a stage or job opens its own page, including from inside the job view. A group header opens the dashboard.</li>
+                <li>Triggering a pipeline now says so in the status line and names the key, which is the only place it announces itself while you are working. Lowercase <kbd>o</kbd> still opens the GitHub commit, so the two do not collide.</li>
+                <li>Pipeline, stage and job names come from the server and end up in a URL handed to the OS, so each segment is validated first and a name outside GoCD's own character set reports instead of opening anything.</li>
+              </ul>
+            </div>
+          </article>
+
+          <article class="release-item">
+            <div class="release-meta">
+              <span class="release-dot" aria-hidden="true"></span>
               <span class="release-tag">v0.10.7</span>
               <time datetime="2026-08-26">2026-08-26</time>
             </div>

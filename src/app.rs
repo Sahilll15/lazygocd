@@ -3,7 +3,7 @@ use crate::config::Config;
 use crate::github::GitHubClient;
 use crate::model::{
     ArtifactNode, DashboardGroup, DashboardPipeline, GitRef, PipelineInstance, ViewFilter,
-    flatten_artifacts,
+    flatten_artifacts, is_safe_segment,
 };
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use ratatui::layout::Rect;
@@ -775,10 +775,15 @@ impl App {
             let result = match &action {
                 PendingAction::Trigger(name) => client
                     .trigger_pipeline(name)
-                    .map(|_| format!("Triggered {name}")),
+                    .map(|_| format!("Triggered {name}. Press O to open it in GoCD")),
                 PendingAction::TriggerWithVars { pipeline, vars } => client
                     .trigger_pipeline_with_vars(pipeline, vars)
-                    .map(|_| format!("Triggered {pipeline} with {} variable(s)", vars.len())),
+                    .map(|_| {
+                        format!(
+                            "Triggered {pipeline} with {} variable(s). Press O to open it in GoCD",
+                            vars.len()
+                        )
+                    }),
                 PendingAction::Pause(name) => client
                     .pause_pipeline(name, "paused via lazygocd")
                     .map(|_| format!("Paused {name}")),
@@ -1163,6 +1168,7 @@ impl App {
             KeyCode::Char('R') => self.request_rerun(),
             KeyCode::Char('f') => self.toggle_favorite(),
             KeyCode::Char('o') => self.open_in_browser(),
+            KeyCode::Char('O') => self.open_in_gocd(),
             KeyCode::Char('y') => self.copy_selected(),
             KeyCode::Char('V') => {
                 if self.filter.is_empty() {
@@ -1432,6 +1438,11 @@ impl App {
         match key.code {
             KeyCode::Esc | KeyCode::Char('q') => {
                 self.modal = None;
+                return;
+            }
+            KeyCode::Char('O') => {
+                self.modal = Some(Modal::ConsoleLog(Box::new(state)));
+                self.open_in_gocd();
                 return;
             }
             KeyCode::Char('r') => {
@@ -2269,6 +2280,81 @@ impl App {
         }
     }
 
+    /// 'O': the GoCD page for whatever is selected. The target narrows as focus
+    /// moves right, from the whole dashboard down to one job's build detail.
+    fn open_in_gocd(&mut self) {
+        match self.gocd_url_for_selection() {
+            Ok(url) => match open_url(&url) {
+                Ok(()) => self.status_line = format!("Opened {url}"),
+                Err(e) => self.error_line = Some(format!("Couldn't open browser: {e}")),
+            },
+            Err(msg) => self.status_line = msg,
+        }
+    }
+
+    fn gocd_url_for_selection(&self) -> Result<String, String> {
+        if self.demo {
+            return Err("Demo mode has no real GoCD server to open".to_string());
+        }
+        let base = self.server_url.trim_end_matches('/');
+        if base.is_empty() {
+            return Err("No GoCD server configured yet, press 'A' to connect".to_string());
+        }
+
+        // An open job view is the most specific selection there is, so it wins
+        // over whatever row is underneath it.
+        if let Some(Modal::ConsoleLog(state)) = &self.modal {
+            return gocd_job_url(base, &state.job_ref);
+        }
+
+        // A group header or the favorites header: nothing narrower to point at.
+        let Some(pipeline) = self.current_row_pipeline_name() else {
+            return Ok(format!("{base}/pipelines"));
+        };
+        if !is_safe_segment(&pipeline) {
+            return Err(format!("Can't build a GoCD URL for {pipeline:?}"));
+        }
+
+        // On the tree the pipeline itself is the target, not one of its runs.
+        if self.focus == Focus::Groups {
+            return Ok(format!("{base}/tab/pipeline/history/{pipeline}"));
+        }
+        let Some(inst) = self.history.get(self.history_selected) else {
+            return Ok(format!("{base}/tab/pipeline/history/{pipeline}"));
+        };
+        let run_url = format!("{base}/pipelines/value_stream_map/{pipeline}/{}", inst.counter);
+        if self.focus == Focus::History {
+            return Ok(run_url);
+        }
+
+        let (stage_idx, job_idx) = match self.detail_rows.get(self.detail_selected) {
+            Some(DetailRow::Stage(s)) => (*s, None),
+            Some(DetailRow::Job(s, j)) => (*s, Some(*j)),
+            None => return Ok(run_url),
+        };
+        let Some(stage) = inst.stages.get(stage_idx) else {
+            return Ok(run_url);
+        };
+        // A stage that hasn't been scheduled has no instance page yet.
+        let Some(stage_counter) = stage.counter.clone() else {
+            return Ok(run_url);
+        };
+        let mut job_ref = JobRef {
+            pipeline,
+            pipeline_counter: inst.counter,
+            stage: stage.name.clone(),
+            stage_counter,
+            job: String::new(),
+        };
+        match job_idx.and_then(|j| stage.jobs.get(j)) {
+            Some(job) => {
+                job_ref.job = job.name.clone();
+                gocd_job_url(base, &job_ref)
+            }
+            None => gocd_stage_url(base, &job_ref),
+        }
+    }
+
     pub fn current_row_pipeline_name(&self) -> Option<String> {
         match self.focus {
             Focus::Groups => match self.rows.get(self.selected)? {
@@ -2842,12 +2928,50 @@ fn base64(data: &[u8]) -> String {
     out
 }
 
+/// GoCD's stage and job pages address an instance by both counters, so every
+/// part is server data that lands in a URL handed to the OS.
+fn gocd_stage_url(base: &str, r: &JobRef) -> Result<String, String> {
+    check_job_ref(r)?;
+    Ok(format!(
+        "{base}/pipelines/{}/{}/{}/{}",
+        r.pipeline, r.pipeline_counter, r.stage, r.stage_counter
+    ))
+}
+
+fn gocd_job_url(base: &str, r: &JobRef) -> Result<String, String> {
+    check_job_ref(r)?;
+    if !is_safe_segment(&r.job) {
+        return Err(format!("Can't build a GoCD URL for job {:?}", r.job));
+    }
+    Ok(format!(
+        "{base}/tab/build/detail/{}/{}/{}/{}/{}",
+        r.pipeline, r.pipeline_counter, r.stage, r.stage_counter, r.job
+    ))
+}
+
+fn check_job_ref(r: &JobRef) -> Result<(), String> {
+    for (what, part) in [
+        ("pipeline", r.pipeline.as_str()),
+        ("stage", r.stage.as_str()),
+        ("stage counter", r.stage_counter.as_str()),
+    ] {
+        if !is_safe_segment(part) {
+            return Err(format!("Can't build a GoCD URL for {what} {part:?}"));
+        }
+    }
+    Ok(())
+}
+
+fn url_chars_ok(url: &str) -> bool {
+    url.chars().all(|c| {
+        c.is_ascii_alphanumeric() || matches!(c, ':' | '/' | '.' | '-' | '_' | '~' | '?' | '=' | '#')
+    })
+}
+
 fn open_url(url: &str) -> std::io::Result<()> {
     // Windows routes through `cmd /C start`, which re-parses &, | and ^ that
     // std's argument quoting leaves alone. The URL is built from server data.
-    if !url.chars().all(|c| {
-        c.is_ascii_alphanumeric() || matches!(c, ':' | '/' | '.' | '-' | '_' | '~' | '?' | '=' | '#')
-    }) {
+    if !url_chars_ok(url) {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
             "refusing to open a URL containing unexpected characters",
@@ -2968,6 +3092,56 @@ mod tests {
             "https://github.com/acme/%PATH%/commit/abc",
         ] {
             assert!(super::open_url(hostile).is_err(), "accepted {hostile:?}");
+        }
+    }
+
+    fn job_ref(pipeline: &str, stage: &str, job: &str) -> super::JobRef {
+        super::JobRef {
+            pipeline: pipeline.to_string(),
+            pipeline_counter: 42,
+            stage: stage.to_string(),
+            stage_counter: "2".to_string(),
+            job: job.to_string(),
+        }
+    }
+
+    // These are GoCD's own route shapes; getting a segment order wrong lands the
+    // user on a 404 rather than failing loudly here.
+    #[test]
+    fn gocd_urls_match_the_server_routes() {
+        let r = job_ref("web-app", "build", "compile");
+        assert_eq!(
+            super::gocd_stage_url("https://gocd.example.com/go", &r).unwrap(),
+            "https://gocd.example.com/go/pipelines/web-app/42/build/2"
+        );
+        assert_eq!(
+            super::gocd_job_url("https://gocd.example.com/go", &r).unwrap(),
+            "https://gocd.example.com/go/tab/build/detail/web-app/42/build/2/compile"
+        );
+    }
+
+    // Pipeline, stage and job names are server data heading for a URL that gets
+    // handed to a shell on Windows, so they must be rejected before open_url.
+    #[test]
+    fn gocd_urls_refuse_names_open_url_would_reject() {
+        for r in [
+            job_ref("web app", "build", "compile"),
+            job_ref("web-app", "bui|ld", "compile"),
+            job_ref("web-app", "build", "comp&ile"),
+            job_ref("web-app", "build", ""),
+        ] {
+            assert!(super::gocd_job_url("https://gocd.example.com/go", &r).is_err(), "{r:?}");
+        }
+    }
+
+    #[test]
+    fn legal_gocd_names_survive_the_open_url_allowlist() {
+        let r = job_ref("web-app.release_2", "build.stage", "compile_x86-64");
+        for url in [
+            super::gocd_stage_url("https://gocd.example.com/go", &r).unwrap(),
+            super::gocd_job_url("https://gocd.example.com/go", &r).unwrap(),
+        ] {
+            assert!(super::url_chars_ok(&url), "open_url would reject {url}");
         }
     }
 

@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.10.8 - 2026-09-03
+
+- `O` opens whatever is selected in the GoCD web UI, so a run you just
+  triggered is one keystroke from the page you would otherwise have clicked
+  four levels deep to reach. The target narrows with focus: a pipeline in the
+  tree opens its activity page, a run in the history pane opens its value
+  stream map, and a stage or job opens its own page, including from inside the
+  job view. A group header opens the dashboard. `o` still opens the GitHub
+  commit, so the two do not collide.
+- Triggering a pipeline now says so in the status line and names `O`, which is
+  the only place the new key announces itself while you are working.
+- Pipeline, stage and job names come from the server and end up in a URL handed
+  to the OS, so each segment is validated first and a name outside GoCD's own
+  character set reports instead of opening anything.
+
 ## v0.10.7 - 2026-08-26
 
 - `ctrl-g` folds pipeline group names into the filter, contributed by

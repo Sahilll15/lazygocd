@@ -42,6 +42,7 @@ GoCD's web dashboard gets slow and clicky on large installations. lazygocd loads
 - **Favorites** — star pipelines with `f`; they pin to a ★ section at the top
 - **Endless history** — reaching the bottom of the history pane loads older runs automatically, page by page
 - **Stale-deploy detection** — compares each deployed commit against the branch head and flags `⚠ not latest`, one check per git material when a pipeline has several; uses your `gh` CLI token automatically, and `o` jumps to the commit or pending diff on GitHub. GitHub Enterprise works too (`github_api_base`)
+- **Jump to the GoCD web UI** — `O` opens whatever is selected in a browser: a pipeline's activity page, a run's value stream map, or a single stage or job's page, so a run you just triggered with `t` is one keystroke from the page you would have clicked to
 - **Failure notifications** — a desktop notification when a favorited pipeline's latest run turns red (macOS/Linux, `notifications = false` to opt out)
 - **Feels instant** — disk-cached dashboard renders before the network responds, history prefetches on hover, adaptive rendering idles at ~0% CPU
 - **Network-resilient** — cached data stays browsable through VPN drops; reconnect anytime with `A`
@@ -141,6 +142,7 @@ export EDITOR=code              # VS Code, returns to the TUI immediately
 | `X` | cancel the currently running stage (confirm) |
 | `R` | rerun the failed jobs of the selected run's failed stage (`a` in the confirm reruns the whole stage) |
 | `o` | open the selected run's commit on GitHub (or the pending diff when the deploy is behind) |
+| `O` | open the selection in the GoCD web UI: the pipeline's activity page from the tree, the run's value stream map from history, and a stage or job's own page from the details pane or the job view |
 | `/` | fuzzy-filter pipelines |
 | `r` | refresh |
 | `A` | connect / reconnect GoCD |
@@ -150,7 +152,7 @@ export EDITOR=code              # VS Code, returns to the TUI immediately
 
 Mouse: click focuses a pane and selects a row, click again to open, scroll wheel scrolls the pane under the cursor.
 
-In the job view: `tab`/`1`-`3` switch between Console, Artifacts, and Materials tabs; `/` searches the log with `n`/`N` to jump between matches; `j`/`k` scroll, `g`/`G` top/bottom (`G` resumes auto-follow), `r` refresh, `q`/`esc` close. On the Artifacts tab, `enter` opens the selected file in your browser.
+In the job view: `tab`/`1`-`3` switch between Console, Artifacts, and Materials tabs; `/` searches the log with `n`/`N` to jump between matches; `j`/`k` scroll, `g`/`G` top/bottom (`G` resumes auto-follow), `r` refresh, `q`/`esc` close. On the Artifacts tab, `enter` opens the selected file in your browser. `O` opens the job's GoCD page from any tab.
 
 ## Configuration
 

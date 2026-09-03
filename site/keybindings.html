@@ -128,6 +128,7 @@
               <tr><td><kbd>enter</kbd> <span class="c-muted">(Artifacts)</span></td><td>Open or close a folder; on a file, open it in the browser. <kbd>l</kbd>/right opens, <kbd>h</kbd>/left closes and steps out to the parent</td></tr>
               <tr><td><kbd>e</kbd></td><td>Open the current log in your own editor (<code>$VISUAL</code> / <code>$EDITOR</code>); vim and nvim take over the terminal, code and zed open beside it</td></tr>
               <tr><td><kbd>y</kbd></td><td>Copy: commit SHA (history/details), pipeline or group name (tree), artifact URL (job view)</td></tr>
+              <tr><td><kbd>O</kbd></td><td>Open the selected pipeline's activity page in the GoCD web UI; on a group header, the GoCD dashboard</td></tr>
               <tr><td><kbd>T</kbd></td><td>Trigger with environment variables (NAME=VALUE form); plain <kbd>t</kbd> triggers as-is</td></tr>
               <tr><td><kbd>R</kbd></td><td>Rerun a failed run: <kbd>y</kbd> = failed jobs only, <kbd>a</kbd> = the whole stage</td></tr>
               <tr><td><kbd>f</kbd></td><td>Star / unstar the selected pipeline as a favorite</td></tr>
@@ -148,6 +149,7 @@
               <tr><td><kbd>esc</kbd></td><td>Back to the groups pane</td></tr>
               <tr><td><kbd>X</kbd></td><td>Cancel the currently running stage of the open pipeline (asks to confirm; only offered while a stage is actually active)</td></tr>
               <tr><td><kbd>o</kbd></td><td>Open the selected run&#39;s commit on GitHub, or the pending deployed...head diff when the latest deploy is behind</td></tr>
+              <tr><td><kbd>O</kbd></td><td>Open the selected run&#39;s value stream map in the GoCD web UI</td></tr>
               <tr><td><kbd>t</kbd> <kbd>p</kbd> <kbd>f</kbd></td><td>Trigger / pause / favorite, same as in the groups pane</td></tr>
             </tbody>
           </table>
@@ -164,6 +166,7 @@
               <tr><td><kbd>esc</kbd></td><td>Back to the history pane</td></tr>
               <tr><td><kbd>X</kbd></td><td>Cancel the currently running stage (asks to confirm)</td></tr>
               <tr><td><kbd>o</kbd></td><td>Open the selected run&#39;s commit on GitHub</td></tr>
+              <tr><td><kbd>O</kbd></td><td>Open the selected stage or job's own page in the GoCD web UI</td></tr>
               <tr><td><kbd>t</kbd> <kbd>p</kbd> <kbd>f</kbd></td><td>Trigger / pause / favorite, same as elsewhere</td></tr>
             </tbody>
           </table>
@@ -181,6 +184,7 @@
               <tr><td><kbd>n</kbd>/<kbd>N</kbd></td><td>Jump to the next / previous search match</td></tr>
               <tr><td><kbd>j</kbd>/<kbd>k</kbd></td><td>Scroll (Console/Materials) or move the selection (Artifacts)</td></tr>
               <tr><td><kbd>enter</kbd> <kbd>o</kbd></td><td>Artifacts tab: open the selected file in your browser</td></tr>
+              <tr><td><kbd>O</kbd></td><td>Open this job's page in the GoCD web UI, from any tab</td></tr>
               <tr><td><kbd>g</kbd>/<kbd>G</kbd></td><td>Jump to top / bottom; <kbd>G</kbd> also resumes auto-follow of a live log</td></tr>
               <tr><td><kbd>r</kbd></td><td>Refresh</td></tr>
               <tr><td><kbd>q</kbd> <kbd>esc</kbd></td><td>Close the job view</td></tr>

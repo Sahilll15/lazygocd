@@ -128,6 +128,22 @@
       </div>
       <p>If you have the GitHub CLI signed in, lazygocd uses <code>gh auth token</code> automatically, so private repos work with zero setup. Otherwise public repos still work unauthenticated (rate-limited), and <kbd>@</kbd> lets you paste a personal access token. Press <kbd>o</kbd> on any run to open its commit on GitHub, or the pending diff when the latest deploy is behind the branch head. The check only runs for the latest run, never for an older row you happen to have selected.</p>
 
+      <h2 id="gocd-web">Jump to the GoCD web UI</h2>
+      <p>Some things still belong in the browser: approving a manual stage, editing pipeline config, reading a value stream map across ten upstream pipelines. <kbd>O</kbd> opens whatever is selected, so you land on the page you would have clicked four levels deep to reach. The target narrows as focus moves right:</p>
+      <div class="tblwrap">
+        <table class="tbl">
+          <thead><tr><th>Selected</th><th>Opens</th></tr></thead>
+          <tbody>
+            <tr><td>A group header</td><td>The GoCD dashboard</td></tr>
+            <tr><td>A pipeline in the tree</td><td>That pipeline's activity page</td></tr>
+            <tr><td>A run in the history pane</td><td>That run's value stream map</td></tr>
+            <tr><td>A stage in the details pane</td><td>That stage's detail page</td></tr>
+            <tr><td>A job, or the open job view</td><td>That job's detail page</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Triggering with <kbd>t</kbd> says so in the status line and names the key, so a run you just started is one keystroke from its page. Lowercase <kbd>o</kbd> still opens the GitHub commit, so the two never collide. Pipeline, stage, and job names arrive from the server and end up in a URL handed to your OS, so each one is validated against GoCD's own character set first; a name outside it reports in the status line instead of opening anything.</p>
+
       <h2 id="cancel">Cancel vs pause</h2>
       <p>The two are deliberately separate keys because they do different things:</p>
       <div class="tblwrap">
