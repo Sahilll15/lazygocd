@@ -1,5 +1,36 @@
 # Changelog
 
+## v0.11.0 - 2026-09-09
+
+- Naming a pipeline prints its latest run and exits, without opening the UI:
+  `lazygocd web-app`. You get the run status, who triggered it, the commit,
+  every stage and job, and the recent runs. The name is matched in tiers so it
+  rarely needs typing in full: an exact name wins, then a unique substring,
+  then fzf-style initials, and a query matching several pipelines lists them
+  and exits 1 rather than guessing which one you meant.
+- `--logs` prints a job's console output and `-f` keeps tailing it while the
+  pipeline runs. It picks the job for you, preferring the one still running,
+  then the one that failed, then the last job of the last stage, which is
+  usually what you meant whether you are watching a build or working out why
+  last night's broke. `--stage`, `--job` and `--run` override that, and
+  `--interval` changes the poll cadence. Tailing is polling, because GoCD
+  serves console output as a file with a line cursor and offers no push.
+- `--history` lists recent runs without the stage and job detail, and `--json`
+  prints the whole thing machine-readably for scripting. Exit status is 0 for a
+  match and 1 for a miss, so it works as a shell condition.
+- Shell completion now fills in pipeline names, so `lazygocd web<tab>` offers
+  the real pipelines on your server. Names come from the on-disk dashboard
+  cache rather than the network, so completion is instant and works offline.
+  `lazygocd pipelines` prints that cached list.
+- The log stream drops GoCD's `xx|` stream marker and keeps the timestamp,
+  matching the TUI, and colours by severity only when stdout is a terminal.
+  Log text itself passes through byte for byte, so a build's own ANSI survives
+  a pipe, and the header goes to stderr so `--logs > build.log` is just log.
+- A running job reported its result as `Unknown` rather than `Building`, since
+  GoCD only sets a result once a job finishes and keeps the live word in
+  `state`. Both the CLI and the TUI now show the state while a job is in
+  flight.
+
 ## v0.10.8 - 2026-09-03
 
 - `O` opens whatever is selected in the GoCD web UI, so a run you just

@@ -381,6 +381,18 @@ struct DashboardCache {
     pipelines: Vec<DashboardPipeline>,
 }
 
+/// Every cached pipeline name, for shell completion. Reads the disk cache only:
+/// a completion that waited on the network would hang the user's prompt.
+pub fn cached_pipeline_names() -> Vec<String> {
+    let Some(cache) = load_dashboard_cache() else {
+        return Vec::new();
+    };
+    let mut names: Vec<String> = cache.pipelines.into_iter().map(|p| p.name).collect();
+    names.sort();
+    names.dedup();
+    names
+}
+
 fn load_dashboard_cache() -> Option<DashboardCache> {
     let path = crate::config::dashboard_cache_path().ok()?;
     let text = std::fs::read_to_string(path).ok()?;
@@ -2317,12 +2329,12 @@ impl App {
 
         // On the tree the pipeline itself is the target, not one of its runs.
         if self.focus == Focus::Groups {
-            return Ok(format!("{base}/tab/pipeline/history/{pipeline}"));
+            return gocd_pipeline_url(base, &pipeline);
         }
         let Some(inst) = self.history.get(self.history_selected) else {
-            return Ok(format!("{base}/tab/pipeline/history/{pipeline}"));
+            return gocd_pipeline_url(base, &pipeline);
         };
-        let run_url = format!("{base}/pipelines/value_stream_map/{pipeline}/{}", inst.counter);
+        let run_url = gocd_run_url(base, &pipeline, inst.counter)?;
         if self.focus == Focus::History {
             return Ok(run_url);
         }
@@ -2926,6 +2938,24 @@ fn base64(data: &[u8]) -> String {
         });
     }
     out
+}
+
+/// The pipeline's own activity page. GoCD still serves the legacy
+/// /tab/pipeline/history path, which redirects to /pipeline/activity.
+pub fn gocd_pipeline_url(base: &str, pipeline: &str) -> Result<String, String> {
+    if !is_safe_segment(pipeline) {
+        return Err(format!("Can't build a GoCD URL for {pipeline:?}"));
+    }
+    Ok(format!("{base}/tab/pipeline/history/{pipeline}"))
+}
+
+/// One run's value stream map, which is the closest thing GoCD has to a
+/// landing page for a single instance.
+pub fn gocd_run_url(base: &str, pipeline: &str, counter: i64) -> Result<String, String> {
+    if !is_safe_segment(pipeline) {
+        return Err(format!("Can't build a GoCD URL for {pipeline:?}"));
+    }
+    Ok(format!("{base}/pipelines/value_stream_map/{pipeline}/{counter}"))
 }
 
 /// GoCD's stage and job pages address an instance by both counters, so every

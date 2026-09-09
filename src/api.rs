@@ -53,6 +53,16 @@ impl GoCdClient {
         })
     }
 
+    /// The server root for building web-UI links. None in demo mode, where the
+    /// base is a placeholder rather than a real host.
+    pub fn web_base(&self) -> Option<&str> {
+        if self.demo {
+            return None;
+        }
+        let base = self.base_url.trim_end_matches('/');
+        (!base.is_empty()).then_some(base)
+    }
+
     fn request(&self, method: Method, path: &str, api_version: u8) -> RequestBuilder {
         let url = format!("{}{}", self.base_url, path);
         let mut rb = self.client.request(method, url).header(

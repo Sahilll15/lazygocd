@@ -144,6 +144,30 @@
       </div>
       <p>Triggering with <kbd>t</kbd> says so in the status line and names the key, so a run you just started is one keystroke from its page. Lowercase <kbd>o</kbd> still opens the GitHub commit, so the two never collide. Pipeline, stage, and job names arrive from the server and end up in a URL handed to your OS, so each one is validated against GoCD's own character set first; a name outside it reports in the status line instead of opening anything.</p>
 
+      <h2 id="cli">A command line, not just a UI</h2>
+      <p>Not every question needs a full-screen interface. Naming a pipeline prints its latest run and exits, which is what you want from a shell, a script, or a <code>watch</code>:</p>
+      <div class="mini-term">
+        <div class="mrow">$ lazygocd web-app</div>
+        <div class="mrow"><span class="c-muted">Run </span>#90 c31a9e0  <span class="c-green">Passed</span></div>
+        <div class="mrow"><span class="c-muted">By&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span>changes</div>
+        <div class="mrow">&nbsp;&nbsp;build&nbsp;&nbsp;<span class="c-green">Passed</span>&nbsp;&nbsp;<span class="c-muted">(success)</span></div>
+      </div>
+      <p>The name is matched in tiers, so you rarely type it in full: an exact name wins, then a unique substring, then fzf-style initials (<code>abt</code> finds <code>api-build-test</code>). A query that matches several pipelines lists them and exits 1, so you narrow it instead of guessing which one you got. Shell completion fills the names in for you, read from the local dashboard cache rather than the network, so tab completion is instant and works offline.</p>
+      <p><kbd>--logs</kbd> prints a job's console output and <kbd>-f</kbd> keeps tailing while the pipeline runs. It picks the job you probably meant: the one still running, else the one that failed, else the last job of the last stage. Override with <code>--stage</code>, <code>--job</code> and <code>--run</code>.</p>
+      <div class="tblwrap">
+        <table class="tbl">
+          <thead><tr><th>Flag</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td><code>--logs</code> <code>-f</code></td><td>Print a job's console log, and keep tailing it while the job runs</td></tr>
+            <tr><td><code>--history</code></td><td>List recent runs without the stage and job detail</td></tr>
+            <tr><td><code>--json</code></td><td>The whole thing machine-readably, for <code>jq</code></td></tr>
+            <tr><td><code>-n</code></td><td>How many recent runs, or ambiguous matches, to list</td></tr>
+            <tr><td><code>--run</code></td><td>Target a specific run counter, including ones older than the first history page</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Tailing is polling rather than a push stream, because GoCD serves console output as a plain file with a <code>startLineNumber</code> cursor and offers no websocket for clients. Most of the end-to-end lag is GoCD's own: the agent batches console output before shipping it, and measured against a live build, lines arrived four to ten seconds after their own timestamp. Log text passes through byte for byte so a build's ANSI colours survive a pipe, the header goes to stderr so <code>--logs &gt; build.log</code> is only log, and under <kbd>-f</kbd> the exit status follows the stage, which makes it usable as a gate.</p>
+
       <h2 id="cancel">Cancel vs pause</h2>
       <p>The two are deliberately separate keys because they do different things:</p>
       <div class="tblwrap">

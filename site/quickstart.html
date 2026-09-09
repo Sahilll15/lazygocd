@@ -166,6 +166,20 @@
 
   <section>
     <div class="wrap">
+      <h2>Shell completion and one-shot lookups</h2>
+      <p class="sec-lede">Completion is worth setting up on day one, because it fills in your actual pipeline names from the local dashboard cache. No network, so tab stays instant.</p>
+      <pre><code>lazygocd completions zsh &gt; ~/.zfunc/_lazygocd
+lazygocd man &gt; /usr/local/share/man/man1/lazygocd.1</code></pre>
+      <p>bash and fish work the same way. Once the cache exists, after your first successful launch, <code>lazygocd web</code> plus tab offers the real pipelines on your server.</p>
+      <p>You do not have to open the interface at all. Naming a pipeline prints its latest run and exits, <code>--logs -f</code> tails a running job, and <code>--history</code> lists recent runs. See <a href="/features#cli">the CLI section on Features</a>.</p>
+      <pre><code>lazygocd web-app
+lazygocd web-app --logs -f
+lazygocd web-app --json | jq -r '.status'</code></pre>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
       <h2>Environment variable overrides</h2>
       <p class="sec-lede">Env vars always win over the config file. Handy for scripting, CI, or trying a second server without touching your saved config. Setting a full set (URL plus a credential) skips the connect form entirely.</p>
       <div class="tblwrap" style="max-width:820px">

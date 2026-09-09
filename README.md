@@ -42,6 +42,7 @@ GoCD's web dashboard gets slow and clicky on large installations. lazygocd loads
 - **Favorites** — star pipelines with `f`; they pin to a ★ section at the top
 - **Endless history** — reaching the bottom of the history pane loads older runs automatically, page by page
 - **Stale-deploy detection** — compares each deployed commit against the branch head and flags `⚠ not latest`, one check per git material when a pipeline has several; uses your `gh` CLI token automatically, and `o` jumps to the commit or pending diff on GitHub. GitHub Enterprise works too (`github_api_base`)
+- **Check a pipeline without the UI** — `lazygocd web-app` prints the latest run, its stages and jobs, and the last ten runs, then exits. `--logs -f` tails a running job's console output like `tail -f`, `--history` lists recent runs, and `--json` makes it scriptable. The name is matched loosely, an ambiguous query lists what it matched, and `<tab>` completes pipeline names from the local cache
 - **Jump to the GoCD web UI** — `O` opens whatever is selected in a browser: a pipeline's activity page, a run's value stream map, or a single stage or job's page, so a run you just triggered with `t` is one keystroke from the page you would have clicked to
 - **Failure notifications** — a desktop notification when a favorited pipeline's latest run turns red (macOS/Linux, `notifications = false` to opt out)
 - **Feels instant** — disk-cached dashboard renders before the network responds, history prefetches on hover, adaptive rendering idles at ~0% CPU
@@ -94,11 +95,59 @@ lazygocd completions zsh > ~/.zfunc/_lazygocd
 lazygocd man > /usr/local/share/man/man1/lazygocd.1
 ```
 
+The completion script fills in pipeline names for you, so `lazygocd web<tab>` offers the real pipelines on your server. Names come from the dashboard cache on disk rather than the network, so completion stays instant and works offline; it fills in after your first successful launch, and refreshes every time the dashboard loads. `lazygocd pipelines` prints that cached list if you want it for something else. zsh, bash and fish are wired.
+
 Run `lazygocd`. On first launch it walks you through connecting inside the TUI itself: server URL (e.g. `https://gocd.example.com/go`), then username/password or a personal access token (recommended). Certificates are always verified and there is no prompt to skip that; if your server uses an internal CA, add it to your OS trust store, or set `insecure_skip_verify = true` in the config yourself. The config is saved to `~/.config/lazygocd/config.toml` and you land straight in the dashboard. That directory is created mode `0700` and every file in it is written mode `0600`, since it holds a plaintext credential plus a cache of every pipeline name on your server. Press `A` anytime to reconnect or switch servers.
 
 Env vars override the config for scripting: `GOCD_URL`, `GOCD_USERNAME`, `GOCD_PASSWORD`, `GOCD_TOKEN`, `GOCD_INSECURE=1`, `GITHUB_TOKEN`.
 
 `GOCD_INSECURE=1` and `insecure_skip_verify = true` turn off certificate verification. Your credential still goes out on every request, so anything on the network path can read it. Use them only for a server and network you trust.
+
+## One-shot lookups
+
+Naming a pipeline skips the TUI entirely and prints its latest run to stdout, which is what you want from a shell, a script, or a `watch`:
+
+```sh
+lazygocd web-app
+```
+
+The name is matched in tiers, so you rarely type it in full: an exact name wins, then a unique substring, then fzf-style initials (`abt` finds `api-build-test`). A query that matches several pipelines lists them on stderr and exits 1, so you can narrow it rather than guess which one you got.
+
+```sh
+lazygocd web-app --json | jq -r '.status'
+lazygocd web-app -n 3
+```
+
+`--json` prints the pipeline, its group, pause state, the latest run with its stages and jobs, and the recent runs. `-n` sets how many recent runs (or ambiguous matches) to list, default 10. Exit status is 0 for a match, 1 for a miss or an ambiguous query, so `if lazygocd web-app >/dev/null; then ...` works. Colour is emitted only when stdout is a terminal, so piped output stays clean.
+
+### Tail console logs
+
+`--logs` prints a job's console output, and `-f` keeps tailing it while the pipeline runs, the same three-second cadence the TUI uses:
+
+```sh
+lazygocd web-app --logs -f
+```
+
+It picks the job for you: the one currently running, else the one that failed, else the last job of the last stage. That is usually what you meant, whether you are watching a build in flight or looking at why last night's run broke. Override it with `--stage` and `--job`, and name a specific run with `--run`, which reaches runs older than the first history page.
+
+```sh
+lazygocd web-app --logs --stage test --job integration
+lazygocd web-app --logs --run 41
+```
+
+GoCD frames each line as `xx|HH:MM:SS.mmm body`, where `xx` is the stream marker. The marker is protocol rather than content, so it is stripped and the timestamp kept, matching what the TUI shows. Log text itself passes through byte for byte, ANSI and all, so a build's own colours survive a pipe. Under `-f` the exit status follows the stage: 0 when it passes, 1 when it fails, which makes it usable as a gate.
+
+The log goes to stdout and the header line to stderr, so `lazygocd web-app --logs > build.log` gives you just the log.
+
+Tailing is polling, not a push stream: GoCD serves console output as a plain file with a `startLineNumber` cursor and offers no websocket for clients, so `-f` asks for new lines every three seconds and appends whatever arrived. `--interval` changes that. Most of the end-to-end lag is on GoCD's side, since the agent batches console output before shipping it to the server; measured against a live build, lines showed up around four to ten seconds after their own timestamp. A cycle that returns new output skips the stage-status check, because output arriving is already proof the job is alive.
+
+### Recent runs
+
+`--history` drops the stage and job detail and prints only the run table, which is easier to scan and to `grep`:
+
+```sh
+lazygocd web-app --history -n 25
+```
 
 ## Keybindings
 
