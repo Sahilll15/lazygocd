@@ -90,12 +90,16 @@ cargo build --release
 
 Run `lazygocd` (`--help` for flags; `--config-dir` overrides the config location, and `$XDG_CONFIG_HOME` is respected). Shell completions and a man page ship built in:
 
+Installing with Homebrew sets up completions and the man page for you, nothing to do. For a `cargo install` or a downloaded binary, generate them yourself into a directory that is already on your `fpath`:
+
 ```sh
-lazygocd completions zsh > ~/.zfunc/_lazygocd
-lazygocd man > /usr/local/share/man/man1/lazygocd.1
+lazygocd completions zsh > "$(brew --prefix)/share/zsh/site-functions/_lazygocd"
+lazygocd man > "$(brew --prefix)/share/man/man1/lazygocd.1"
 ```
 
-The completion script fills in pipeline names for you, so `lazygocd web<tab>` offers the real pipelines on your server. Names come from the dashboard cache on disk rather than the network, so completion stays instant and works offline; it fills in after your first successful launch, and refreshes every time the dashboard loads. `lazygocd pipelines` prints that cached list if you want it for something else. zsh, bash and fish are wired.
+Without Homebrew, `~/.zfunc` works only if you have added it to `fpath` before `compinit` runs; `echo $fpath` tells you what your shell already searches. bash and fish take `completions bash` and `completions fish`.
+
+Completion fills in pipeline names, so `lazygocd web<tab>` offers the real pipelines on your server. Names come from the dashboard cache on disk rather than the network, so completion stays instant and works offline. The cache appears after your first successful launch and refreshes whenever the dashboard loads, so completion is empty until you have run lazygocd once. `lazygocd pipelines` prints that cached list if you want it for something else.
 
 Run `lazygocd`. On first launch it walks you through connecting inside the TUI itself: server URL (e.g. `https://gocd.example.com/go`), then username/password or a personal access token (recommended). Certificates are always verified and there is no prompt to skip that; if your server uses an internal CA, add it to your OS trust store, or set `insecure_skip_verify = true` in the config yourself. The config is saved to `~/.config/lazygocd/config.toml` and you land straight in the dashboard. That directory is created mode `0700` and every file in it is written mode `0600`, since it holds a plaintext credential plus a cache of every pipeline name on your server. Press `A` anytime to reconnect or switch servers.
 

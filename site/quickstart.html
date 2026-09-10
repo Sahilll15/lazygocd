@@ -167,10 +167,12 @@
   <section>
     <div class="wrap">
       <h2>Shell completion and one-shot lookups</h2>
-      <p class="sec-lede">Completion is worth setting up on day one, because it fills in your actual pipeline names from the local dashboard cache. No network, so tab stays instant.</p>
-      <pre><code>lazygocd completions zsh &gt; ~/.zfunc/_lazygocd
-lazygocd man &gt; /usr/local/share/man/man1/lazygocd.1</code></pre>
-      <p>bash and fish work the same way. Once the cache exists, after your first successful launch, <code>lazygocd web</code> plus tab offers the real pipelines on your server.</p>
+      <p class="sec-lede">Completion fills in your actual pipeline names from the local dashboard cache. No network, so tab stays instant.</p>
+      <p><b>Homebrew does this for you.</b> The formula installs zsh, bash and fish completions plus the man page, so there is nothing to run. Open a new shell and <code>lazygocd dev</code> plus tab already offers your pipelines.</p>
+      <p>For a <code>cargo install</code> or a downloaded binary, generate them into a directory your shell already searches:</p>
+      <pre><code>lazygocd completions zsh &gt; "$(brew --prefix)/share/zsh/site-functions/_lazygocd"
+lazygocd man &gt; "$(brew --prefix)/share/man/man1/lazygocd.1"</code></pre>
+      <p>A path like <code>~/.zfunc</code> works only if you added it to <code>fpath</code> before <code>compinit</code> runs; <code>echo $fpath</code> shows what your shell searches today. The cache appears after your first successful launch, so completion is empty until you have run lazygocd once.</p>
       <p>You do not have to open the interface at all. Naming a pipeline prints its latest run and exits, <code>--logs -f</code> tails a running job, and <code>--history</code> lists recent runs. See <a href="/features#cli">the CLI section on Features</a>.</p>
       <pre><code>lazygocd web-app
 lazygocd web-app --logs -f
