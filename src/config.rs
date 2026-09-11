@@ -112,6 +112,86 @@ pub fn favorites_path() -> Result<PathBuf> {
     Ok(config_dir()?.join("favorites.json"))
 }
 
+/// Marker for a value that should be produced by running a command rather than
+/// stored literally, e.g. `auth_token = "{{cmd: op read op://vault/item/field}}"`.
+const CMD_PREFIX: &str = "{{cmd:";
+const CMD_SUFFIX: &str = "}}";
+
+/// Runs `body` through the shell and returns its trimmed stdout.
+///
+/// Deliberately shell-interpreted so a config can use quoting, pipes and flags
+/// the way it would at a prompt. That makes the config file executable input, so
+/// it is only ever read from the user's own config path.
+fn run_value_command(body: &str, field: &str) -> Result<String> {
+    let body = body.trim();
+    if body.is_empty() {
+        anyhow::bail!("{field}: {CMD_PREFIX} ... {CMD_SUFFIX} is empty, expected a command to run");
+    }
+
+    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
+    let out = std::process::Command::new(&shell)
+        .arg("-c")
+        .arg(body)
+        .output()
+        .with_context(|| format!("{field}: running `{body}`"))?;
+
+    if !out.status.success() {
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        let detail = stderr.trim();
+        let detail = if detail.is_empty() { "no stderr" } else { detail };
+        anyhow::bail!("{field}: `{body}` failed ({}): {detail}", out.status);
+    }
+
+    // Trailing newlines are near-universal in CLI output and would otherwise end
+    // up inside a bearer token, producing a confusing 401 rather than an error.
+    let value = String::from_utf8(out.stdout)
+        .with_context(|| format!("{field}: `{body}` produced non-UTF-8 output"))?
+        .trim()
+        .to_string();
+
+    if value.is_empty() {
+        anyhow::bail!("{field}: `{body}` succeeded but produced no output");
+    }
+    Ok(value)
+}
+
+/// Returns the value to use for a configured string: either the literal, or the
+/// output of the command it wraps. Anything not wrapped is passed through
+/// untouched, so existing configs holding plain secrets keep working.
+fn resolve_value(raw: &str, field: &str) -> Result<String> {
+    let trimmed = raw.trim();
+    match trimmed
+        .strip_prefix(CMD_PREFIX)
+        .and_then(|rest| rest.strip_suffix(CMD_SUFFIX))
+    {
+        Some(body) => run_value_command(body, field),
+        None => Ok(raw.to_string()),
+    }
+}
+
+fn resolve_opt(slot: &mut Option<String>, field: &str) -> Result<()> {
+    if let Some(raw) = slot.as_deref() {
+        *slot = Some(resolve_value(raw, field)?);
+    }
+    Ok(())
+}
+
+/// Expands every `{{cmd: ...}}` value in a loaded config.
+///
+/// Applied to all string-valued settings, not just secrets, so a URL or editor
+/// can be derived from the environment too. Runs after the env-var overrides so
+/// that `GOCD_TOKEN="{{cmd: ...}}"` works exactly like the file form.
+fn resolve_command_values(cfg: &mut Config) -> Result<()> {
+    cfg.server_url = resolve_value(&cfg.server_url, "server_url")?;
+    cfg.github_api_base = resolve_value(&cfg.github_api_base, "github_api_base")?;
+    resolve_opt(&mut cfg.username, "username")?;
+    resolve_opt(&mut cfg.password, "password")?;
+    resolve_opt(&mut cfg.auth_token, "auth_token")?;
+    resolve_opt(&mut cfg.github_token, "github_token")?;
+    resolve_opt(&mut cfg.editor, "editor")?;
+    Ok(())
+}
+
 /// Loads config from the file at `config_path()` if present, otherwise an
 /// empty/unconfigured `Config`. There's no separate CLI setup wizard: the
 /// TUI itself prompts for connection details (see `app::ReauthForm`) when
@@ -146,6 +226,8 @@ pub fn load() -> Result<Config> {
     if let Ok(v) = std::env::var("GITHUB_TOKEN") {
         cfg.github_token = Some(v);
     }
+
+    resolve_command_values(&mut cfg)?;
 
     Ok(cfg)
 }
@@ -202,6 +284,69 @@ pub fn save(path: &Path, cfg: &Config) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn plain_value_passes_through_untouched() {
+        assert_eq!(resolve_value("abc123", "auth_token").unwrap(), "abc123");
+    }
+
+    #[test]
+    fn a_value_that_merely_mentions_cmd_is_not_executed() {
+        let raw = "token-{{cmd-like}}-value";
+        assert_eq!(resolve_value(raw, "auth_token").unwrap(), raw);
+    }
+
+    #[test]
+    fn wrapped_command_is_executed_and_trimmed() {
+        let out = resolve_value("{{cmd: printf 'secret\n'}}", "auth_token").unwrap();
+        assert_eq!(out, "secret");
+    }
+
+    #[test]
+    fn command_can_use_quoting_and_pipes() {
+        let out = resolve_value("{{cmd: echo 'a b' | tr ' ' '-'}}", "auth_token").unwrap();
+        assert_eq!(out, "a-b");
+    }
+
+    #[test]
+    fn failing_command_reports_the_field_and_stderr() {
+        let err = resolve_value("{{cmd: echo nope >&2; exit 3}}", "auth_token").unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("auth_token"), "{msg}");
+        assert!(msg.contains("nope"), "{msg}");
+    }
+
+    #[test]
+    fn command_producing_no_output_is_an_error_not_an_empty_secret() {
+        let err = resolve_value("{{cmd: true}}", "auth_token").unwrap_err();
+        assert!(err.to_string().contains("no output"), "{err}");
+    }
+
+    #[test]
+    fn empty_command_body_is_rejected() {
+        let err = resolve_value("{{cmd:   }}", "auth_token").unwrap_err();
+        assert!(err.to_string().contains("expected a command"), "{err}");
+    }
+
+    #[test]
+    fn every_string_field_is_resolved_not_just_the_token() {
+        let mut cfg = Config {
+            server_url: "{{cmd: echo https://gocd.example.com/go}}".into(),
+            username: Some("{{cmd: echo alice}}".into()),
+            password: Some("{{cmd: echo pw}}".into()),
+            auth_token: Some("{{cmd: echo tok}}".into()),
+            github_token: Some("{{cmd: echo ghtok}}".into()),
+            editor: Some("{{cmd: echo nvim}}".into()),
+            ..Config::default()
+        };
+        resolve_command_values(&mut cfg).unwrap();
+        assert_eq!(cfg.server_url, "https://gocd.example.com/go");
+        assert_eq!(cfg.username.as_deref(), Some("alice"));
+        assert_eq!(cfg.password.as_deref(), Some("pw"));
+        assert_eq!(cfg.auth_token.as_deref(), Some("tok"));
+        assert_eq!(cfg.github_token.as_deref(), Some("ghtok"));
+        assert_eq!(cfg.editor.as_deref(), Some("nvim"));
+    }
 
     #[test]
     fn flag_override_beats_xdg_and_home() {

@@ -213,13 +213,30 @@ In the job view: `tab`/`1`-`3` switch between Console, Artifacts, and Materials 
 
 ```toml
 server_url = "https://gocd.example.com/go"
-auth_token = "..."            # or username + password
+auth_token = "..."            # or username + password, or a {{cmd: ...}} (see below)
 insecure_skip_verify = false  # true only for self-signed certs
 poll_interval_secs = 30       # background auto-refresh cadence
 github_token = "..."          # optional; `gh auth token` is used automatically if unset
 github_api_base = "https://api.github.com"  # GitHub Enterprise: point this at your GHE /api/v3
 notifications = true          # desktop notification when a favorited pipeline turns red
 ```
+
+### Keeping secrets out of the config file
+
+Any string setting can name a command instead of a literal value. Wrap it in
+`{{cmd: ...}}` and lazygocd runs it and uses the trimmed output:
+
+```toml
+auth_token   = "{{cmd: op read 'op://Private/GoCD/token'}}"   # 1Password
+github_token = "{{cmd: gh auth token}}"                       # GitHub CLI
+password     = "{{cmd: pass show work/gocd}}"                 # pass
+```
+
+The command runs through your shell, so quoting, flags and pipes work as they do
+at a prompt. Only values wrapped in `{{cmd: ...}}` are executed, so a config
+holding a plain token keeps working unchanged. A command that fails, or succeeds
+without printing anything, is reported as an error rather than being sent as an
+empty credential.
 
 Git materials on any host (`git@HOST:owner/repo.git` or `https://HOST/owner/repo`) are recognized; `o` opens commits on that host, and the stale-deploy check always queries `github_api_base` — for repos on a GitHub Enterprise instance, set it to `https://ghe.example.com/api/v3`.
 
